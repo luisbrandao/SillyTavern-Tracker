@@ -5,7 +5,7 @@ import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js"
 import { debug, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
 import { generateTracker, getRequestPrompt } from "./generation.js";
-import { generationModes, generationTargets } from "./settings/settings.js";
+import { generationModes, generationTargets, trackerFormat } from "./settings/settings.js";
 import { jsonToYAML, yamlToJSON } from "../lib/ymlParser.js";
 import { FIELD_INCLUDE_OPTIONS, getDefaultTracker, OUTPUT_FORMATS, getTracker as getCleanTracker, trackerExists, cleanTracker } from "./trackerDataHandler.js";
 import { TrackerEditorModal } from "./ui/trackerEditorModal.js";
@@ -61,6 +61,20 @@ function restoreSendButtons() {
 	activateSendButtons();
 }
 
+/**
+ * Serializes a tracker object into the string form configured by the "Tracker Format" setting
+ * (JSON or YAML). Injection paths previously hardcoded YAML, so the injected/inline tracker block
+ * ignored the setting; this keeps the injected block in the chosen format.
+ * @param {object} trackerObject - The tracker as a plain JS object.
+ * @returns {string} The serialized tracker.
+ */
+function serializeTracker(trackerObject) {
+	if (extensionSettings.trackerFormat === trackerFormat.JSON) {
+		return JSON.stringify(trackerObject, null, 2);
+	}
+	return jsonToYAML(trackerObject);
+}
+
 //#region Tracker Functions
 
 /**
@@ -94,16 +108,18 @@ export async function injectInlinePrompt(clearTracker = false) {
  * @param {number} position - The position to inject the tracker.
  */
 export async function injectTracker(tracker = "", position = 0) {
-	let trackerYAML = "";
+	let trackerBlock = "";
 	if(trackerExists(tracker, extensionSettings.trackerDef) && tracker != "") {
-		trackerYAML = cleanTracker(tracker, extensionSettings.trackerDef, OUTPUT_FORMATS.YAML, false);
-		if(trackerYAML != "") {
-			debug("Injecting tracker:", { tracker: trackerYAML, position });
-			trackerYAML = `<tracker>\n${trackerYAML}\n</tracker>`;
+		// Clean to a JSON object (strips defaults), then serialize in the user's configured format.
+		const cleaned = cleanTracker(tracker, extensionSettings.trackerDef, OUTPUT_FORMATS.JSON, false);
+		if(cleaned && Object.keys(cleaned).length) {
+			const trackerText = serializeTracker(cleaned);
+			debug("Injecting tracker:", { tracker: trackerText, position, format: extensionSettings.trackerFormat });
+			trackerBlock = `<tracker>\n${trackerText}\n</tracker>`;
 		}
 	}
 	position = Math.max(extensionSettings.minimumDepth, position);
-	await setExtensionPrompt("trackerEnhanced", trackerYAML, 1, position, true, EXTENSION_PROMPT_ROLES.SYSTEM);
+	await setExtensionPrompt("trackerEnhanced", trackerBlock, 1, position, true, EXTENSION_PROMPT_ROLES.SYSTEM);
 }
 
 /**
@@ -131,8 +147,8 @@ async function addInlineTrackers(lastMesId, noSave = false) {
 
 	for (const mesId of messages) {
 		const mes = chat[mesId];
-		const trackerYAML = jsonToYAML(mes.tracker);
-		mes.mes = `<tracker>${trackerYAML}</tracker>\n\n${mes.mes.trim()}`;
+		const trackerText = serializeTracker(mes.tracker);
+		mes.mes = `<tracker>${trackerText}</tracker>\n\n${mes.mes.trim()}`;
 		mes.has_inline_tracker = true;
 	}
 
@@ -233,7 +249,7 @@ async function handleInlineGeneration(type) {
 		await refreshInlineTrackers(mesId - 1, true);
 		const mes = chat[mesId];
 		if (type === ACTION_TYPES.REGENERATE && mes.tracker && Object.keys(mes.tracker).length !== 0) {
-			const tracker = jsonToYAML(mes.tracker);
+			const tracker = serializeTracker(mes.tracker);
 			mes.mes = `<tracker>${tracker}</tracker>\n\n`;
 		} else if (type === ACTION_TYPES.SWIPE && mes.tracker && Object.keys(mes.tracker).length !== 0) {
 			if (mes.swipe_id == null) {
@@ -252,7 +268,7 @@ async function handleInlineGeneration(type) {
 					},
 				];
 			}
-			const tracker = jsonToYAML(mes.tracker);
+			const tracker = serializeTracker(mes.tracker);
 			const trackerString = `<tracker>${tracker}</tracker>\n\n`;
 			mes.swipes.push(trackerString);
 			mes.swipe_info.push({
