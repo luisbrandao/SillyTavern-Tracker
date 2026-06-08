@@ -7,7 +7,7 @@ An advanced, feature-rich tracker extension for SillyTavern that provides compre
 - No longer automatically send a tracker generation request when you merely open an old chat.
    - This is because SillyTavern uses dry-run during reconstruction of a chat page when you open an old chat. The extension treated it as a real new message. The original likely behaved the same way; I just added a guard.
    - This should save one tracker generation every time you open an old chat.
-- Added groundwork for the upcoming narrative lifecycle system (character birth → growth → death) in `src/sillyTavernHelper.js` and `src/ui/developmentTestUI.js`.
+- Removed the unrelated Development Test section (character/group creation, editing, and management). The extension now focuses solely on tracker generation.
 
 ## 🚀 Enhanced Features
 
