@@ -582,6 +582,339 @@ const responseLength = 0;
 
 //#endregion
 
+//#region Techmago Presets
+
+// Shared by the "Techmago - Timeless" and "Techmago - RPG - Timeless" presets.
+const techmagoGenerateSystemPrompt = `You are a Scene Tracker Assistant, tasked with providing clear, consistent, and structured updates to a scene tracker for a roleplay. Use the latest message, previous tracker details, and context from recent messages to accurately update the tracker. Your response must follow the specified {{trackerFormat}} structure exactly, ensuring that each field is filled and complete. If specific information is not provided, make reasonable assumptions based on prior descriptions, logical inferences, or default character details.
+
+### Key Instructions:
+1. **Tracker Format**: Always respond with a complete tracker in {{trackerFormat}} format. Every field must be present in the response, even if unchanged. Do not omit fields or change the {{trackerFormat}} structure.
+2. **Default Assumptions for Missing Information**: 
+   - **Character Details**: If no new details are provided for a character, assume reasonable defaults (e.g., hairstyle, posture, or attire based on previous entries or context).
+   - **Outfit**: Describe the complete outfit for each character, using specific details for color, fabric, and style (e.g., “fitted black leather jacket with silver studs on the collar”). **Underwear must always be included in the outfit description.** If underwear is intentionally missing, specify this clearly in the description (e.g., "No bra", "No panties"). If the character is undressed, list the entire outfit.
+3. **Consistency**: Match field structures precisely, maintaining {{trackerFormat}} syntax. If no changes occur in a field, keep the most recent value.
+4. **Avoid Redundancies**: Use only details provided or logically inferred from context. Do not introduce speculative or unnecessary information.
+5. **Focus and Pause**: Treat each scene update as a standalone, complete entry. Respond with the full tracker every time, even if there are only minor updates.
+
+### Tracker Template
+Return your response in the following {{trackerFormat}} structure, following this format precisely:
+
+\`\`\`
+<tracker>
+{{defaultTracker}}
+</tracker>
+\`\`\`
+
+### Important Reminders:
+1. **Recent Messages and Current Tracker**: Before updating, always consider the recent messages and the provided <Current Tracker> to ensure all changes are accurately represented.
+2. **Structured Response**: Do not add any extra information outside of the {{trackerFormat}} tracker structure.
+3. **Complete Entries**: Always provide the full tracker in {{trackerFormat}}, even if only minor updates are made.
+
+Your primary objective is to ensure clarity, consistency, and structured responses for scene tracking in {{trackerFormat}} format, providing complete details even when specifics are not explicitly stated.
+Only output characters present in the scene.`;
+
+const techmagoGenerateRequestPrompt = `[Analyze the previous message along with the recent messages provided below and update the current scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time. Only output characters present in the scene.
+
+### Response Rules:
+{{trackerFieldPrompt}}
+
+Ensure the response remains consistent, strictly follows this structure in {{trackerFormat}}, and omits any extra data or deviations. NEVER use markdown in the output. Respond only the tracker block with no commentary. You MUST enclose the tracker in html tags <tracker> AND </tracker>. Output ONLY the final version of the tracker, updated with the data from the newer messages]`;
+
+const techmagoTimelessMesTrackerTemplate = `<div class="tracker_default_mes_template">
+    <table>
+        <tr>
+            <td>Weather:</td>
+            <td>{{Weather}}</td>
+        </tr>
+    </table>
+    <details>
+        <summary><span>Tracker</span></summary>
+        <table>
+            <tr>
+                <td>Present:</td>
+                <td>{{#join "; " CharactersPresent}}</td>
+            </tr>
+        </table>
+        <div class="mes_tracker_characters">
+            {{#foreach Characters character}}
+            <hr>
+            <strong>{{character}}:</strong><br />
+            <table>
+                <tr>
+                    <td>Hair:</td>
+                    <td>{{character.Hair}}</td>
+                </tr>
+                <tr>
+                    <td>Appearance:</td>
+                    <td>{{character.Appearance}}</td>
+                </tr>
+                <tr>
+                    <td>Outfit:</td>
+                    <td>{{character.Outfit}}</td>
+                </tr>
+                <tr>
+                    <td>Position:</td>
+                    <td>{{character.PostureAndInteraction}}</td>
+                </tr>
+            </table>
+            {{/foreach}}
+        </div>
+    </details>
+</div>
+<hr>`;
+
+const techmagoRpgTimelessMesTrackerTemplate = `<div class="tracker_default_mes_template">
+    <table>
+        <tr>
+            <td>Weather:</td>
+            <td>{{Weather}}</td>
+        </tr>
+    </table>
+    <details>
+        <summary><span>Tracker</span></summary>
+        <table>
+            <tr>
+                <td>Present:</td>
+                <td>{{#join "; " CharactersPresent}}</td>
+            </tr>
+        </table>
+        <div class="mes_tracker_characters">
+            {{#foreach Characters character}}
+            <hr>
+            <strong>{{character}}:</strong><br />
+            <table>
+                <tr>
+                    <td>Hair:</td>
+                    <td>{{character.Hair}}</td>
+                </tr>
+                <tr>
+                    <td>Appearance:</td>
+                    <td>{{character.Appearance}}</td>
+                </tr>
+                <tr>
+                    <td>Outfit:</td>
+                    <td>{{character.Outfit}}</td>
+                </tr>
+                <tr>
+                    <td>Equipament:</td>
+                    <td>{{character.Equipament}}</td>
+                </tr>
+                <tr>
+                    <td>Position:</td>
+                    <td>{{character.PostureAndInteraction}}</td>
+                </tr>
+            </table>
+            {{/foreach}}
+        </div>
+    </details>
+</div>
+<hr>`;
+
+const techmagoTimelessTrackerDef = {
+	"field-0": {
+		"name": "Weather",
+		"type": "STRING",
+		"presence": "DYNAMIC",
+		"prompt": "Describe current weather concisely to set the scene. Example: \"Light Drizzle, Cool Outside\".",
+		"defaultValue": "<Updated weather if changed>",
+		"exampleValues": [
+			"Overcast, mild temperature",
+			"Clear skies, warm evening",
+			"Sunny, gentle sea breeze"
+		],
+		"nestedFields": {}
+	},
+	"field-1": {
+		"name": "CharactersPresent",
+		"type": "ARRAY",
+		"presence": "DYNAMIC",
+		"prompt": "List all characters currently present in an array format.",
+		"defaultValue": "<List of characters present if changed>",
+		"exampleValues": [
+			"[\"Emma Thompson\", \"James Miller\", \"Sophia Rodriguez\"]",
+			"[\"Daniel Lee\", \"Olivia Harris\"]",
+			"[\"Liam Johnson\", \"Emily Clark\"]"
+		],
+		"nestedFields": {}
+	},
+	"field-2": {
+		"name": "Characters",
+		"type": "FOR_EACH_OBJECT",
+		"presence": "DYNAMIC",
+		"prompt": "For each character, update the following details:",
+		"defaultValue": "<Character Name>",
+		"exampleValues": [
+			"[\"Emma Thompson\", \"James Miller\", \"Sophia Rodriguez\"]",
+			"[\"Daniel Lee\", \"Olivia Harris\"]",
+			"[\"Liam Johnson\", \"Emily Clark\"]"
+		],
+		"nestedFields": {
+			"field-3": {
+				"name": "Hair",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Describe style only.",
+				"defaultValue": "<Updated hair description if changed>",
+				"exampleValues": [
+					"[\"Shoulder-length blonde hair, styled straight\", \"Short black hair, neatly combed\", \"Long curly brown hair, pulled back into a low bun\"]",
+					"[\"Short brown hair, damp with sweat\", \"Medium-length red hair, tied up in a high ponytail\"]",
+					"[\"Short sandy blonde hair, slightly tousled\", \"Long wavy brown hair, loose and flowing\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-4": {
+				"name": "Appearance",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Character eye color, distinct features and race.",
+				"defaultValue": "<Updated appearance description if changed>",
+				"exampleValues": [
+					"[\"Human\", \"green eyes\", \"scar on neck\"]",
+					"[\"Fox girl\", \"sandy fennec fox ears and tail\", \"yellow eyes\"]",
+					"[\"Dog hybrid\", \"German shepherd ears and tail\", \"amber eyes\", \"lightly tanned skin\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-5": {
+				"name": "Outfit",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "**IMPORTANT!** List the complete outfit, including **underwear and accessories**, even if the character is undressed. **Underwear must always be included in the outfit description. If underwear is intentionally missing, specify this clearly (e.g. \"No Bra\", \"No Panties\").** Outfit should stay the same until changed for a new one.",
+				"defaultValue": "<Full outfit description, including color, fabric, and style details; **always include underwear and accessories if present. If underwear is intentionally missing, specify clearly**>",
+				"exampleValues": [
+					"[\"Navy blue blazer over a white silk blouse; Gray pencil skirt; Black leather belt; Sheer black stockings; Black leather pumps; Pearl necklace; Silver wristwatch; White lace balconette bra; White lace hipster panties matching the bra\", \"Dark gray suit; Light blue dress shirt; Navy tie with silver stripes; Black leather belt; Black dress shoes; Black socks; White cotton crew-neck undershirt; Black cotton boxer briefs\", \"Cream-colored blouse with ruffled collar; Black slacks; Brown leather belt; Brown ankle boots; Gold hoop earrings; Beige satin push-up bra; Beige satin bikini panties matching the bra\"]",
+					"[\"Gray moisture-wicking t-shirt; Black athletic shorts; White ankle socks; Gray running shoes; Black sports watch; Blue compression boxer briefs\", \"Black sports tank top; Purple athletic leggings; Black athletic sneakers; White ankle socks; Fitness tracker bracelet; Black racerback sports bra; Black seamless athletic bikini briefs matching the bra\"]",
+					"[\"Light blue short-sleeve shirt; Khaki shorts; Brown leather sandals; Silver wristwatch; Blue plaid cotton boxer shorts\", \"White sundress over a red halter bikini; Straw hat; Brown flip-flops; Gold anklet; Red halter bikini top; Red tie-side bikini bottoms matching the top\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-6": {
+				"name": "PostureAndInteraction",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Describe physical posture, position relative to others or objects, and interactions. KEEP IT SHORT AND SIMPLE.",
+				"defaultValue": "<Current posture and interaction if no update is needed>",
+				"exampleValues": [
+					"[\"Standing at the podium, presenting slides, holding a laser pointer\", \"Sitting at the conference table, taking notes on a laptop\", \"Sitting next to James, reviewing printed documents\"]",
+					"[\"Lifting weights at the bench press, focused on form\", \"Running on the treadmill at a steady pace\"]",
+					"[\"Standing at the water's edge, feet in the surf\", \"Lying on a beach towel, sunbathing with eyes closed\"]"
+				],
+				"nestedFields": {}
+			}
+		}
+	}
+};
+
+const techmagoRpgTimelessTrackerDef = {
+	"field-0": {
+		"name": "Weather",
+		"type": "STRING",
+		"presence": "DYNAMIC",
+		"prompt": "Describe current weather concisely to set the scene. Example: \"Light Drizzle, Cool Outside\".",
+		"defaultValue": "<Updated weather if changed>",
+		"exampleValues": [
+			"Overcast, mild temperature",
+			"Clear skies, warm evening",
+			"Sunny, gentle sea breeze"
+		],
+		"nestedFields": {}
+	},
+	"field-1": {
+		"name": "CharactersPresent",
+		"type": "ARRAY",
+		"presence": "DYNAMIC",
+		"prompt": "List all characters currently present in an array format.",
+		"defaultValue": "<List of characters present if changed>",
+		"exampleValues": [
+			"[\"Emma Thompson\", \"James Miller\", \"Sophia Rodriguez\"]",
+			"[\"Daniel Lee\", \"Olivia Harris\"]",
+			"[\"Liam Johnson\", \"Emily Clark\"]"
+		],
+		"nestedFields": {}
+	},
+	"field-2": {
+		"name": "Characters",
+		"type": "FOR_EACH_OBJECT",
+		"presence": "DYNAMIC",
+		"prompt": "For each character, update the following details:",
+		"defaultValue": "<Character Name>",
+		"exampleValues": [
+			"[\"Emma Thompson\", \"James Miller\", \"Sophia Rodriguez\"]",
+			"[\"Daniel Lee\", \"Olivia Harris\"]",
+			"[\"Liam Johnson\", \"Emily Clark\"]"
+		],
+		"nestedFields": {
+			"field-3": {
+				"name": "Hair",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Describe style only.",
+				"defaultValue": "<Updated hair description if changed>",
+				"exampleValues": [
+					"[\"Shoulder-length blonde hair, styled straight\", \"Short black hair, neatly combed\", \"Long curly brown hair, pulled back into a low bun\"]",
+					"[\"Short brown hair, damp with sweat\", \"Medium-length red hair, tied up in a high ponytail\"]",
+					"[\"Short sandy blonde hair, slightly tousled\", \"Long wavy brown hair, loose and flowing\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-4": {
+				"name": "Appearance",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Character eye color, distinct features and race.",
+				"defaultValue": "<Updated appearance description if changed>",
+				"exampleValues": [
+					"[\"Human\", \"green eyes\", \"scar on neck\"]",
+					"[\"Fox girl\", \"sandy fennec fox ears and tail\", \"yellow eyes\"]",
+					"[\"Dog hybrid\", \"German shepherd ears and tail\", \"amber eyes\", \"lightly tanned skin\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-5": {
+				"name": "Outfit",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "**IMPORTANT!** List the complete outfit, including **underwear and accessories**, even if the character is undressed. **Underwear must always be included in the outfit description. If underwear is intentionally missing, specify this clearly (e.g. \"No Bra\", \"No Panties\").** Outfit should stay the same until changed for a new one.",
+				"defaultValue": "<Full outfit description, including color, fabric, and style details; **always include underwear and accessories if present. If underwear is intentionally missing, specify clearly**>",
+				"exampleValues": [
+					"[\"Navy blue blazer over a white silk blouse; Gray pencil skirt; Black leather belt; Sheer black stockings; Black leather pumps; Pearl necklace; Silver wristwatch; White lace balconette bra; White lace hipster panties matching the bra\", \"Dark gray suit; Light blue dress shirt; Navy tie with silver stripes; Black leather belt; Black dress shoes; Black socks; White cotton crew-neck undershirt; Black cotton boxer briefs\", \"Cream-colored blouse with ruffled collar; Black slacks; Brown leather belt; Brown ankle boots; Gold hoop earrings; Beige satin push-up bra; Beige satin bikini panties matching the bra\"]",
+					"[\"Gray moisture-wicking t-shirt; Black athletic shorts; White ankle socks; Gray running shoes; Black sports watch; Blue compression boxer briefs\", \"Black sports tank top; Purple athletic leggings; Black athletic sneakers; White ankle socks; Fitness tracker bracelet; Black racerback sports bra; Black seamless athletic bikini briefs matching the bra\"]",
+					"[\"Light blue short-sleeve shirt; Khaki shorts; Brown leather sandals; Silver wristwatch; Blue plaid cotton boxer shorts\", \"White sundress over a red halter bikini; Straw hat; Brown flip-flops; Gold anklet; Red halter bikini top; Red tie-side bikini bottoms matching the top\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-6": {
+				"name": "Equipament",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Describe other equipment items characters have with them.",
+				"defaultValue": "<Updated if equipment changes description if changed>",
+				"exampleValues": [
+					"[\"Obsidian Gladius\", \"Silver dagger\"]",
+					"[\"Traveler pack\"]",
+					"[\"Bow\", \"Resistance crystal\", \"Hidden dagger\"]"
+				],
+				"nestedFields": {}
+			},
+			"field-7": {
+				"name": "PostureAndInteraction",
+				"type": "STRING",
+				"presence": "DYNAMIC",
+				"prompt": "Describe physical posture, position relative to others or objects, and interactions. KEEP IT SHORT AND SIMPLE.",
+				"defaultValue": "<Current posture and interaction if no update is needed>",
+				"exampleValues": [
+					"[\"Standing at the podium, presenting slides, holding a laser pointer\", \"Sitting at the conference table, taking notes on a laptop\", \"Sitting next to James, reviewing printed documents\"]",
+					"[\"Lifting weights at the bench press, focused on form\", \"Running on the treadmill at a steady pace\"]",
+					"[\"Standing at the water's edge, feet in the surf\", \"Lying on a beach towel, sunbathing with eyes closed\"]"
+				],
+				"nestedFields": {}
+			}
+		}
+	}
+};
+
+//#endregion
+
 export const defaultSettings = {
 	enabled: true,
 	selectedProfile: "current",
@@ -681,6 +1014,48 @@ export const defaultSettings = {
 			mesTrackerTemplate: mesTrackerTemplate,
 			mesTrackerJavascript: mesTrackerJavascript,
 			trackerDef: trackerDef,
+		},
+		"Techmago - Timeless": {
+			generationMode: generationModes.SINGLE_STAGE,
+
+			generateContextTemplate: generateContextTemplate,
+			generateSystemPrompt: techmagoGenerateSystemPrompt,
+			generateRequestPrompt: techmagoGenerateRequestPrompt,
+			generateRecentMessagesTemplate: generateRecentMessagesTemplate,
+
+			messageSummarizationContextTemplate: "",
+			messageSummarizationSystemPrompt: "",
+			messageSummarizationRequestPrompt: "",
+			messageSummarizationRecentMessagesTemplate: "",
+
+			inlineRequestPrompt: "",
+
+			characterDescriptionTemplate: characterDescriptionTemplate,
+
+			mesTrackerTemplate: techmagoTimelessMesTrackerTemplate,
+			mesTrackerJavascript: mesTrackerJavascript,
+			trackerDef: techmagoTimelessTrackerDef,
+		},
+		"Techmago - RPG - Timeless": {
+			generationMode: generationModes.SINGLE_STAGE,
+
+			generateContextTemplate: generateContextTemplate,
+			generateSystemPrompt: techmagoGenerateSystemPrompt,
+			generateRequestPrompt: techmagoGenerateRequestPrompt,
+			generateRecentMessagesTemplate: generateRecentMessagesTemplate,
+
+			messageSummarizationContextTemplate: "",
+			messageSummarizationSystemPrompt: "",
+			messageSummarizationRequestPrompt: "",
+			messageSummarizationRecentMessagesTemplate: "",
+
+			inlineRequestPrompt: "",
+
+			characterDescriptionTemplate: characterDescriptionTemplate,
+
+			mesTrackerTemplate: techmagoRpgTimelessMesTrackerTemplate,
+			mesTrackerJavascript: mesTrackerJavascript,
+			trackerDef: techmagoRpgTimelessTrackerDef,
 		},
 	},
 	debugMode: false,
