@@ -7,7 +7,8 @@
 - UI assets remain in `html/settings.html`, `sass/style.scss`, and compiled `style.css`. Treat `docs/Tracker Documentation.pdf` as legacy; rely on `README.md` for current behaviour.
 
 ## Build, Test & Development Commands
-- **Do NOT rebuild `style.css` from `sass/style.scss`.** In this branch the SCSS is stale and incomplete: it is missing the tracker-interface layout, prompt-maker drag/drop, template-controls, reset, and compatibility rules, and it targets the wrong interface id (`#trackerInterface` instead of the real DOM id `#trackerEnhancedInterface`). `style.css` is the hand-maintained source of truth — edit it directly. Running `npx sass ...` will drop those rules and break the "Show message tracker" side window (garbled header, footer buttons jump to the top).
+- `npx sass sass/style.scss style.css --no-source-map` rebuilds stylesheets (`--watch` for live edits). `sass/style.scss` is the source of truth — edit the SCSS, never hand-edit the compiled `style.css`. (The SCSS was resynced to the compiled output in 2026-06; it now includes the tracker-interface layout under the correct DOM id `#trackerEnhancedInterface`, prompt-maker drag/drop, template-controls, reset, and compatibility rules.)
+- dart-sass emits two harmless normalizations vs. older builds: a leading `@charset "UTF-8";` (the compatibility indicators use emoji) and unquoted emoji attribute selectors (`[value*=✅]`); both are valid and render identically.
 - After JS/HTML/CSS changes reload via SillyTavern `Settings → Extensions → Reload`.
 - In the browser console inspect `window.trackerEnhanced` to view runtime state or toggle debug logging.
 

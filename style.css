@@ -1,3 +1,4 @@
+@charset "UTF-8";
 #trackerEnhancedInterface {
   top: unset;
   flex-direction: column;
@@ -413,17 +414,15 @@ label[for=tracker_enhanced_reset_presets] {
 }
 
 /* Completion Preset Compatibility Indicators */
-#tracker_enhanced_completion_preset option[value*="✅"] {
+#tracker_enhanced_completion_preset option[value*=✅] {
   color: #4CAF50;
   font-weight: 500;
 }
-
-#tracker_enhanced_completion_preset option[value*="⚠️"] {
+#tracker_enhanced_completion_preset option[value*=⚠️] {
   color: #FF9800;
   font-weight: 500;
 }
-
-#tracker_enhanced_completion_preset option[value*="❌"] {
+#tracker_enhanced_completion_preset option[value*=❌] {
   color: #f44336;
   font-weight: 500;
 }
