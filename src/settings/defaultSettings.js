@@ -1030,7 +1030,7 @@ export const defaultSettings = {
 			mesTrackerJavascript: mesTrackerJavascript,
 			trackerDef: trackerDef,
 		},
-		"Techmago - Timeless": {
+		"Timeless": {
 			generationMode: generationModes.SINGLE_STAGE,
 
 			generateContextTemplate: generateContextTemplate,
@@ -1051,7 +1051,7 @@ export const defaultSettings = {
 			mesTrackerJavascript: mesTrackerJavascript,
 			trackerDef: techmagoTimelessTrackerDef,
 		},
-		"Techmago - RPG - Timeless": {
+		"RPG - Timeless": {
 			generationMode: generationModes.SINGLE_STAGE,
 
 			generateContextTemplate: generateContextTemplate,
