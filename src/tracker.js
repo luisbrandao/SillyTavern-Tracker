@@ -504,4 +504,41 @@ export async function addTrackerToMessage(mesId) {
 	if (manageStopButton) restoreSendButtons();
 }
 
+/**
+ * Removes the tracker from a message: clears the stored tracker object, strips any inline
+ * <tracker> block from the message text (inline mode), removes the preview, and saves the chat.
+ * @param {number} mesId - The message index.
+ * @returns {Promise<boolean>} true if a tracker was present and removed, false otherwise.
+ */
+export async function removeTrackerFromMessage(mesId) {
+	const mes = chat[mesId];
+	if (!mes) return false;
+
+	const hadTracker = !!(mes.tracker && Object.keys(mes.tracker).length > 0);
+
+	// Clear the canonical tracker store and any inline-tracker marker.
+	delete mes.tracker;
+	delete mes.has_inline_tracker;
+
+	// Strip an inline <tracker> block from the message text (inline mode) and re-render its DOM.
+	let inlineStripped = false;
+	if (typeof mes.mes === "string" && /<tracker>[\s\S]*?<\/tracker>/i.test(mes.mes)) {
+		mes.mes = mes.mes.replace(/<tracker>[\s\S]*?<\/tracker>/gi, "").trim();
+		inlineStripped = true;
+	}
+
+	await saveChatConditional();
+
+	// Re-render the preview (empty tracker => the preview block is removed).
+	TrackerPreviewManager.updatePreview(mesId);
+
+	if (inlineStripped) {
+		const mesDom = document.querySelector(`#chat .mes[mesid="${mesId}"]`);
+		const mesText = mesDom?.querySelector(".mes_text");
+		if (mesText) mesText.innerHTML = messageFormatting(mes.mes, mes.name, mes.is_system, mes.is_user, Number(mesId));
+	}
+
+	return hadTracker;
+}
+
 //#endregion

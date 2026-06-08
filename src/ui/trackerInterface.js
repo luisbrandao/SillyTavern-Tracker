@@ -6,6 +6,8 @@ import { error, getPreviousNonSystemMessageIndex, getLastNonSystemMessageIndex, 
 import { generateTracker } from "../generation.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS, saveTracker } from "../trackerDataHandler.js";
 import { TrackerContentRenderer } from './components/trackerContentRenderer.js';
+import { removeTrackerFromMessage } from "../tracker.js";
+import { callGenericPopup, POPUP_TYPE } from "../../../../../popup.js";
 
 export class TrackerInterface {
     constructor() {
@@ -61,6 +63,7 @@ export class TrackerInterface {
                 <option value="all-fields">All Fields</option>
                 <option value="static-only">Static Only</option>
             </select>
+            <button id="trackerInterfaceDeleteButton" class="menu_button menu_button_default interactable" tabindex="0">Delete</button>
         </div>`;
 
         const newElement = $(template);
@@ -88,11 +91,13 @@ export class TrackerInterface {
         this.editButton = newElement.find('#trackerInterfaceEditButton');
         this.regenerateButton = newElement.find('#trackerInterfaceRegenerateTracker');
         this.regenOptions = newElement.find('#trackerInterfaceRegenOptions');
+        this.deleteButton = newElement.find('#trackerInterfaceDeleteButton');
 
         // Event handlers for buttons
         this.viewButton.on('click', () => this.switchMode('view'));
         this.editButton.on('click', () => this.switchMode('edit'));
         this.regenerateButton.on('click', () => this.regenerateTracker());
+        this.deleteButton.on('click', () => this.removeTracker());
     }
 
     /**
@@ -200,6 +205,31 @@ export class TrackerInterface {
     }
 
     /**
+     * Removes the tracker from the current message (after confirmation) and closes the interface.
+     */
+    async removeTracker() {
+        const targetMesId = Number.isInteger(this.mesId) && this.mesId >= 0 ? this.mesId : null;
+        if (targetMesId === null || !chat[targetMesId]) {
+            toastr.info('No chat message is associated with this tracker.');
+            return;
+        }
+
+        const confirmed = await callGenericPopup('Remove the tracker from this message?', POPUP_TYPE.CONFIRM);
+        if (!confirmed) return;
+
+        try {
+            this.disableControls(true);
+            await removeTrackerFromMessage(targetMesId);
+            toastr.success('Tracker removed.');
+            this.close();
+        } catch (e) {
+            toastr.error('Failed to remove the tracker. Please try again.');
+            error('Tracker removal error:', e);
+            this.disableControls(false);
+        }
+    }
+
+    /**
      * Disables or enables the control buttons.
      * @param {boolean} disable - Whether to disable the controls.
      */
@@ -208,6 +238,7 @@ export class TrackerInterface {
         this.editButton.prop('disabled', disable);
         this.regenerateButton.prop('disabled', disable);
         this.regenOptions.prop('disabled', disable);
+        this.deleteButton.prop('disabled', disable);
     }
 
     /**

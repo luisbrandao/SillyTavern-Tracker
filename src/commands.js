@@ -1,6 +1,7 @@
 import { debug, getLastNonSystemMessageIndex, getPreviousNonSystemMessageIndex } from "../lib/utils.js";
 import { saveChatConditional, chat, chat_metadata } from "../../../../../script.js";
 import { generateTracker } from "./generation.js";
+import { removeTrackerFromMessage } from "./tracker.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS } from "./trackerDataHandler.js";
 import { TrackerPreviewManager } from "./ui/trackerPreviewManager.js";
 import { extensionSettings } from "../index.js";
@@ -71,6 +72,21 @@ export async function saveTrackerToMessageCommand(args, value){
     TrackerPreviewManager.updatePreview(mesId);
 
     return JSON.stringify(tracker);
+}
+
+export async function removeTrackerFromMessageCommand(args, value){
+    let mesId = args?.message;
+    if (mesId === undefined || mesId === null || mesId === "") {
+        mesId = getLastNonSystemMessageIndex();
+    }
+    mesId = Number(mesId);
+
+    if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) {
+        throw new Error(`No valid message found to remove a tracker from.`);
+    }
+
+    const removed = await removeTrackerFromMessage(mesId);
+    return removed ? "true" : "false";
 }
 
 export async function getTrackerCommand(args, value){
