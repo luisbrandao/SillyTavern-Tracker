@@ -98,9 +98,11 @@ async function loadSettingsUI() {
 		updateFieldVisibility(extensionSettings.generationMode);
 
 		debug("Settings UI initialization completed");
-	} catch (error) {
-		error("Failed to load settings UI:", error);
-		console.error("Tracker Enhanced: Failed to load settings UI:", error);
+	} catch (e) {
+		// NB: don't name this `error` — it would shadow the imported error() logger and turn any
+		// failure here into "TypeError: error is not a function", crashing the whole extension load.
+		error("Failed to load settings UI:", e);
+		console.error("Tracker Enhanced: Failed to load settings UI:", e);
 	}
 }
 

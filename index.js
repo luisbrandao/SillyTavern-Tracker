@@ -22,7 +22,10 @@ import { generateTrackerCommand, getTrackerCommand, saveTrackerToMessageCommand,
 import { FIELD_INCLUDE_OPTIONS } from "./src/trackerDataHandler.js";
 
 export const extensionName = "tracker-enhanced";
-export const extensionFolderPath = "scripts/extensions/third-party/SillyTavern-Tracker-Enhanced";
+// Derive the folder path from this module's own location so the extension works no matter what
+// folder name it's installed into (e.g. "SillyTavern-Tracker" vs "SillyTavern-Tracker-Enhanced").
+// Hardcoding the name caused html/settings.html to 404 when installed under a different name.
+export const extensionFolderPath = new URL(".", import.meta.url).pathname.replace(/^\//, "").replace(/\/+$/, "");
 
 if (!extension_settings[extensionName]) extension_settings[extensionName] = {};
 export const extensionSettings = extension_settings[extensionName];
