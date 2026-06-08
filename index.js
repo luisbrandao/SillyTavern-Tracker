@@ -1,5 +1,5 @@
 import { eventSource, event_types } from "../../../../script.js";
-import { extension_settings } from "../../../../../../scripts/extensions.js";
+import { extension_settings } from "../../../../scripts/extensions.js";
 import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
 import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
 import { ARGUMENT_TYPE, SlashCommandNamedArgument } from "../../../slash-commands/SlashCommandArgument.js";

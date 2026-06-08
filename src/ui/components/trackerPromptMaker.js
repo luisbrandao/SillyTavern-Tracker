@@ -345,27 +345,8 @@ export class TrackerPromptMaker {
 			});
 		const fieldTypeDiv = $('<div class="field-type-wrapper"></div>').append(fieldTypeLabel, fieldTypeSelector);
 
-		// Gender Specific Selector with label (only for nested character fields)
-		const genderSpecificLabel = $("<label>Gender Specific:</label>");
-		const genderSpecificKey = fieldData.genderSpecific || "all";
-		const genderSpecificSelector = $(`
-            <select>
-                <option value="all">All Genders</option>
-                <option value="female">Female Only</option>
-                <option value="male">Male Only</option>
-                <option value="trans">Trans Only</option>
-            </select>
-        `)
-			.val(genderSpecificKey)
-			.on("change", (e) => {
-				const currentFieldId = fieldWrapper.attr("data-field-id");
-				this.updateGenderSpecific(e.target.value, currentFieldId);
-				this.syncBackendObject();
-			});
-		const genderSpecificDiv = $('<div class="gender-specific-wrapper"></div>').append(genderSpecificLabel, genderSpecificSelector);
-
-		// Append field name, static/dynamic toggle, field type, and gender specific to the combined div
-		nameDynamicTypeDiv.append(fieldNameDiv, presenceDiv, fieldTypeDiv, genderSpecificDiv);
+		// Append field name, static/dynamic toggle, and field type to the combined div
+		nameDynamicTypeDiv.append(fieldNameDiv, presenceDiv, fieldTypeDiv);
 
 		// Append the combined div to fieldWrapper
 		fieldWrapper.append(nameDynamicTypeDiv);
@@ -624,21 +605,6 @@ export class TrackerPromptMaker {
 			debug(`Updated default value for field ID: ${fieldId}`);
 		} else {
 			error(`Field with ID ${fieldId} not found during default value update.`);
-		}
-	}
-
-	/**
-	 * Updates the gender specific setting for the field.
-	 * @param {string} genderSpecific - The gender specific setting (all, female, male, trans).
-	 * @param {string} fieldId - The ID of the field being updated.
-	 */
-	updateGenderSpecific(genderSpecific, fieldId) {
-		const fieldData = this.getFieldDataById(fieldId);
-		if (fieldData) {
-			fieldData.genderSpecific = genderSpecific;
-			debug(`Updated gender specific setting for field ID: ${fieldId} to: ${genderSpecific}`);
-		} else {
-			error(`Field with ID ${fieldId} not found during gender specific update.`);
 		}
 	}
 

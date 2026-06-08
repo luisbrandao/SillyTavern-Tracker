@@ -7,7 +7,6 @@ import { defaultSettings, generationModes, generationTargets } from "./defaultSe
 import { generationCaptured } from "../../lib/interconnection.js";
 import { TrackerPromptMakerModal } from "../ui/trackerPromptMakerModal.js";
 import { TrackerTemplateGenerator } from "../ui/components/trackerTemplateGenerator.js";
-import { TrackerJavaScriptGenerator } from "../ui/components/trackerJavaScriptGenerator.js";
 
 export { generationModes, generationTargets, trackerFormat } from "./defaultSettings.js";
 
@@ -192,7 +191,6 @@ function registerSettingsListeners() {
 
 	$("#tracker_enhanced_prompt_maker").on("click", onTrackerPromptMakerClick);
 	$("#tracker_enhanced_generate_template").on("click", onGenerateTemplateClick);
-	$("#tracker_enhanced_generate_javascript").on("click", onGenerateJavaScriptClick);
 	$("#tracker_enhanced_reset_presets").on("click", onTrackerPromptResetClick);
 
 	const {
@@ -841,49 +839,6 @@ function onGenerateTemplateClick() {
 	} catch (error) {
 		console.error('Failed to generate template:', error);
 		toastr.error('Failed to generate template. Check console for details.', 'Template Generation');
-	}
-}
-
-/**
- * Event handler for clicking the Generate JavaScript button.
- */
-function onGenerateJavaScriptClick() {
-	try {
-		if (typeof debug === 'function') {
-			debug('Generate JavaScript clicked. Current trackerDef:', extensionSettings.trackerDef);
-		}
-		
-		// Check if trackerDef exists and has fields
-		if (!extensionSettings.trackerDef || Object.keys(extensionSettings.trackerDef).length === 0) {
-			toastr.warning('No tracker fields defined. Please use the Prompt Maker to define fields first.', 'JavaScript Generation');
-			return;
-		}
-
-		// Generate the JavaScript
-		const jsGenerator = new TrackerJavaScriptGenerator();
-		const generatedJS = jsGenerator.generateJavaScript(extensionSettings.trackerDef);
-		
-		if (typeof debug === 'function') {
-			debug('Generated JavaScript result:', generatedJS);
-		}
-		
-		// Update the textarea and extension settings
-		$("#tracker_enhanced_mes_tracker_javascript").val(generatedJS);
-		extensionSettings.mesTrackerJavascript = generatedJS;
-		
-		// Save settings
-		saveSettingsDebounced();
-		
-		// Show success message
-		toastr.success('JavaScript generated successfully with gender-specific field hiding!', 'JavaScript Generation');
-		
-		if (typeof debug === 'function') {
-			debug('JavaScript generation completed successfully');
-		}
-		
-	} catch (error) {
-		console.error('Failed to generate JavaScript:', error);
-		toastr.error('Failed to generate JavaScript. Check console for details.', 'JavaScript Generation');
 	}
 }
 

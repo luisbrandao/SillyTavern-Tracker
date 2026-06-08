@@ -304,10 +304,6 @@ const mesTrackerTemplate = `<div class="tracker_default_mes_template">
             <strong>{{character}}:</strong><br />
             <table>
 				<tr>
-                    <td>Gender:</td>
-                    <td>{{character.Gender}}</td>
-                </tr>
-				<tr>
                     <td>Age:</td>
                     <td>{{character.Age}}</td>
                 </tr>
@@ -331,30 +327,6 @@ const mesTrackerTemplate = `<div class="tracker_default_mes_template">
                     <td>Position:</td>
                     <td>{{character.PostureAndInteraction}}</td>
                 </tr>
-				<tr>
-					<td>BustWaistHip:</td>
-					<td>{{character.BustWaistHip}}</td>
-				</tr>
-				<tr>
-                    <td>FertilityCycle:</td>
-                    <td>{{character.FertilityCycle}}</td>
-                </tr>
-				<tr>
-                    <td>Pregnancy:</td>
-                    <td>{{character.Pregnancy}}</td>
-                </tr>
-				<tr>
-                    <td>Virginity:</td>
-                    <td>{{character.Virginity}}</td>
-                </tr>
-				<tr>
-                    <td>Traits:</td>
-                    <td>{{character.Traits}}</td>
-                </tr>
-				<tr>
-                    <td>Children:</td>
-                    <td>{{character.Children}}</td>
-                </tr>
             </table>
             {{/foreach}}
         </div>
@@ -362,51 +334,20 @@ const mesTrackerTemplate = `<div class="tracker_default_mes_template">
 </div>
 <hr>`;
 
-// Replace the mesTrackerJavascript around line 361
-
 const mesTrackerJavascript = `()=>{
-const hideFields=(mesId,element)=>{
-const sections=element.querySelectorAll('.mes_tracker_characters strong');
-const addStyle=()=>{
+const applyStyle=()=>{
 if(document.querySelector('style[data-tracker-alignment]'))return;
 const style=document.createElement('style');
 style.textContent='.mes_tracker_characters{display:flex;flex-direction:column;}.mes_tracker_characters table{table-layout:fixed!important;width:100%!important;border-spacing:0!important;}.mes_tracker_characters table td:first-child{width:120px!important;min-width:120px!important;max-width:120px!important;text-align:left!important;vertical-align:top!important;padding:2px 5px!important;}.mes_tracker_characters table td:last-child{width:calc(100% - 125px)!important;text-align:left!important;vertical-align:top!important;padding:2px 5px!important;word-wrap:break-word!important;}';
 style.setAttribute('data-tracker-alignment','true');
 document.head.appendChild(style);
 };
-addStyle();
-sections.forEach((header,index)=>{
-const name=header.textContent.replace(':','').trim();
-let next=header.nextElementSibling;
-let table=null;
-while(next){
-if(next.tagName==='TABLE'){
-table=next;break;
-}
-next=next.nextElementSibling;
-}
-if(table){
-const genderRow=Array.from(table.rows).find(row=>row.cells[0]&&row.cells[0].textContent.trim()==='Gender:');
-if(genderRow&&genderRow.cells[1]){
-const gender=genderRow.cells[1].textContent.trim().toLowerCase();
-if(!gender.includes('female')){
-const toHide=['FertilityCycle:','Pregnancy:','BustWaistHip:'];
-Array.from(table.rows).forEach(row=>{
-if(row.cells[0]&&toHide.includes(row.cells[0].textContent.trim())){
-row.style.display='none';
-}
-});
-}
-}
-}
-});
-};
 const init=()=>{
 try{
 const ctx=SillyTavern.getContext();
 if(ctx&&ctx.eventSource){
-ctx.eventSource.on("TRACKER_ENHANCED_PREVIEW_ADDED",hideFields);
-ctx.eventSource.on("TRACKER_ENHANCED_PREVIEW_UPDATED",hideFields);
+ctx.eventSource.on("TRACKER_ENHANCED_PREVIEW_ADDED",applyStyle);
+ctx.eventSource.on("TRACKER_ENHANCED_PREVIEW_UPDATED",applyStyle);
 }
 }catch(e){
 console.warn('[tracker-enhanced] Init failed, SillyTavern context not available:',e.message);
@@ -416,8 +357,8 @@ const cleanup=()=>{
 try{
 const ctx=SillyTavern.getContext();
 if(ctx&&ctx.eventSource&&typeof ctx.eventSource.off==='function'){
-ctx.eventSource.off("TRACKER_ENHANCED_PREVIEW_ADDED",hideFields);
-ctx.eventSource.off("TRACKER_ENHANCED_PREVIEW_UPDATED",hideFields);
+ctx.eventSource.off("TRACKER_ENHANCED_PREVIEW_ADDED",applyStyle);
+ctx.eventSource.off("TRACKER_ENHANCED_PREVIEW_UPDATED",applyStyle);
 }
 const style=document.querySelector('style[data-tracker-alignment]');
 if(style)style.remove();
@@ -427,7 +368,7 @@ const style=document.querySelector('style[data-tracker-alignment]');
 if(style)style.remove();
 }
 };
-return{init,cleanup,hideGenderSpecificFields:hideFields};
+return{init,cleanup};
 }`;
 
 const trackerDef = {
@@ -548,25 +489,10 @@ const trackerDef = {
 			"[\"Liam Johnson\", \"Emily Clark\"]"
 		],
 		"nestedFields": {
-			"field-9": {
-			"name": "Gender",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "all",
-			"prompt": "A single world and an emoji for Character gender. ",
-			"defaultValue": "<Current gender if no update is needed>",
-			"exampleValues": [
-				"\"Male ♂️\"",
-				"\"Female ♀️\"",
-				"[\"Trans ⚧️\", \"Unkown ❓\"]"
-			],
-			"nestedFields": {}
-			},
 			"field-10": {
 			"name": "Age",
 			"type": "STRING",
 			"presence": "DYNAMIC",
-			"genderSpecific": "all",
 			"prompt": "A single number displays character age based on Narrative. Change with time advancement. Or \"Unkown\" if unkown.",
 			"defaultValue": "<Current Age if no update is needed>",
 			"exampleValues": [
@@ -580,7 +506,6 @@ const trackerDef = {
 			"name": "Hair",
 			"type": "STRING",
 			"presence": "DYNAMIC",
-			"genderSpecific": "all",
 			"prompt": "Describe style only.",
 			"defaultValue": "<Updated hair description if changed>",
 			"exampleValues": [
@@ -594,7 +519,6 @@ const trackerDef = {
 			"name": "Makeup",
 			"type": "STRING",
 			"presence": "DYNAMIC",
-			"genderSpecific": "all",
 			"prompt": "Describe current makeup.",
 			"defaultValue": "<Updated makeup if changed>",
 			"exampleValues": [
@@ -608,7 +532,6 @@ const trackerDef = {
 			"name": "Outfit",
 			"type": "STRING",
 			"presence": "DYNAMIC",
-			"genderSpecific": "all",
 			"prompt": "**IMPORTANT!** List the complete outfit, including **underwear and accessories**, even if the character is undressed. **Underwear must always be included in the outfit description. If underwear is intentionally missing, specify this clearly (e.g. \"No Bra\", \"No Panties\").** Outfit should stay the same until changed for a new one.",
 			"defaultValue": "<Full outfit description, even if removed including color, fabric, and style details; **always include underwear and accessories if present. If underwear is intentionally missing, specify clearly**>",
 			"exampleValues": [
@@ -622,7 +545,6 @@ const trackerDef = {
 			"name": "StateOfDress",
 			"type": "STRING",
 			"presence": "DYNAMIC",
-			"genderSpecific": "all",
 			"prompt": "Describe how put-together or disheveled the character appears, including any removed clothing. Note where clothing items from outfit were discarded.",
 			"defaultValue": "<Current state of dress if no update is needed. Note location where discarded outfit items are placed if character is undressed>",
 			"exampleValues": [
@@ -636,7 +558,6 @@ const trackerDef = {
 			"name": "PostureAndInteraction",
 			"type": "STRING",
 			"presence": "DYNAMIC",
-			"genderSpecific": "all",
 			"prompt": "Describe physical posture, position relative to others or objects, and interactions.",
 			"defaultValue": "<Current posture and interaction if no update is needed>",
 			"exampleValues": [
@@ -644,95 +565,11 @@ const trackerDef = {
 				"[\"Lifting weights at the bench press, focused on form\", \"Running on the treadmill at a steady pace\"]",
 				"[\"Standing at the water's edge, feet in the surf\", \"Lying on a beach towel, sunbathing with eyes closed\"]"
 			],
-			"nestedFields": {}
-			},
-			"field-16": {
-			"name": "BustWaistHip",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "female",
-			"prompt": "**Female Character only!** Display Bust/Waist/Hip measurements in centimetre based on narrative. Or \"Unkown\" if unknown.",
-			"defaultValue": "<Current BustWaistHip if no update is needed>",
-			"exampleValues": [
-			"\"Unknown\"",
-			"\"B80:W60:H86 (CM)\"",
-			"\"B79:W56:H83 (CM)\""
-			],
-			"nestedFields": {}
-			},
-			"field-17": {
-			"name": "FertilityCycle",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "female",
-			"prompt": "**Female Character only!** Displays the current fertility cycle stage. States advance with time. If Pregnancy tracking indicates conception, immediately switch FertilityCycle to \"Pregnant 👶\" and pause the cycle. Remain \"Pregnant 👶\" for the full duration of pregnancy. Resume cycle after delivery.",
-			"defaultValue": "<Current fertility cycle if no update is needed>",
-			"exampleValues": [
-				"[\"Menstrual 🩸 (Safe)\", \"Follicular 🌱 (Low Risk)\"]",
-				"[\"Ovulating 🌺 (High Risk!)\", \"Luteal 🌙 (Moderate Risk)\"]",
-				"[\"Pregnant 👶\"]"
-			],
-			"nestedFields": {}
-			},
-			"field-18": {
-			"name": "Pregnancy",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "female",
-			"prompt": "**Female Character only!** Perform a d100 roll post-creampie scene to determine conception, chances are based on fertility cycle: Menstrual (0%), Follicular (15%), Ovulating (85%), Luteal (30%), Pregnant (0%) (e.g., rolled 80 during ovulating phase, 80<85, then yes. ). If yes, track days pregnant and trimester (1st: 0-90; 2nd: 91-180; 3rd: 181-270). Describe this with father's name.",
-			"defaultValue": "<Current Pregnancy if no update is needed>",
-			"exampleValues": [
-				"\"Not Pregnant\"",
-				"\"1st trimester, 0 days, impregnated by Harry\"",
-				"\"3st trimester, 200 days, impregnated by Harry\""
-			],
-			"nestedFields": {}
-			},
-			"field-19": {
-			"name": "Virginity",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "all",
-			"prompt": "If virgin: \"Virgin\" else \"Lost to {partner}\".  Or \"Unkown\" if unkown.",
-			"defaultValue": "<Current Virginity if no update is needed>",
-			"exampleValues": [
-				"\"Unkown\"",
-				"\"Virgin\"",
-				"\"Lost to Sam Witwicky\""
-			],
-			"nestedFields": {}
-			},
-			"field-20": {
-			"name": "Traits",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "all",
-			"prompt": "Add or Remove trait based on Narrative. \"{trait}: {short description}\"",
-			"defaultValue": "<Current Traits if no update is needed>",
-			"exampleValues": [
-				"[\"No Traits\"]",
-				"[\"Giant Penis: causes tearing pain to partner during sex.\", \"Emotional Intelligence: deeply philosophical and sentimental\"]",
-				"[\"Tight Pussy: increase partner pleasure during sex.\", \"Masochist: gain pleasure from pain.\", \"Sadistic: deriving pleasure from inflicting pain.\"]"
-			],
-			"nestedFields": {}
-			},
-			"field-21": {
-			"name": "Children",
-			"type": "STRING",
-			"presence": "DYNAMIC",
-			"genderSpecific": "all",
-			"prompt": "Add child after birth based on Narrative. Format: \"{Birth Order}: {Name}, {Gender + Symbol}, child with {Other Parent}\"",
-			"defaultValue": "<Current Children if no update is needed>",
-			"exampleValues": [
-				"[\"No Child\"]",
-				"[\"1st Born: Eve, Female ♀️, child with Harry\"]",
-				"[\"1st Born: Aya, Female ♀️, child with Bob\", \"2nd Born: Max, Male ♂️, child with Sam\"]"
-			],
-			"nestedFields": {}
+				"nestedFields": {}
+				}
 			}
 		}
-	}
-};
+	};
 
 const trackerPreviewSelector = ".mes_block .mes_text";
 const trackerPreviewPlacement = "before";

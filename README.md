@@ -16,9 +16,6 @@ This enhanced version significantly expands upon the original tracker with major
 ### 🎯 **Advanced Prompt Maker System**
 - **Smart Positioning**: Automatic scroll adjustment during drag operations in long forms 
 - **Auto-Template Generation**: One-click HTML template generation from your field definitions
-- **Auto-JavaScript Generation**: Dynamic gender-specific field hiding with intelligent detection
-- **New Default Entries for Cultured People**: Fertility Cycles and Pregnancy simulation 🥵  
-- **Gender-Specific Fields**: Configurable field visibility based on character gender (all, female, male, trans)
 
 ### 🔄 **Independent Connection System**  
 - **Non-Disruptive Operation**: Maintains separate connection from main SillyTavern API
@@ -32,7 +29,7 @@ This enhanced version significantly expands upon the original tracker with major
 1. Open SillyTavern Settings → Extensions → Tracker Enhanced
 2. Click **"Prompt Maker"** to open the field editor
 3. **Add Fields**: Use "Add Field" to create tracker properties
-4. **Configure Fields**: Set name, type, presence, and gender-specific visibility
+4. **Configure Fields**: Set name, type, and presence
 5. **Drag & Drop**: Reorder fields by dragging with the hamburger icon ☰
 
 ### 2. **Generating Templates**
@@ -41,17 +38,7 @@ This enhanced version significantly expands upon the original tracker with major
 3. Preview how your tracker will appear in messages
 4. Customize the generated template if needed
 
-### 3. **Setting Up Gender-Specific Fields**
-1. In Prompt Maker, select any character field
-2. Use the **"Gender Specific"** dropdown:
-   - **All Genders**: Show for everyone (default)
-   - **Female Only**: Show only for female characters
-   - **Male Only**: Show only for male characters  
-   - **Trans Only**: Show only for trans characters
-3. Click **"Generate JavaScript"** to create hiding logic
-4. Fields will automatically hide based on character gender
-
-### 4. **Understanding Preset Compatibility**
+### 3. **Understanding Preset Compatibility**
 Unlike the original tracker which forces you to use a matching connection profile and completion preset.    
 I have unlinked them to give you maximum flexibility with fair warnings.     
 When selecting a "Dedicated Completion Preset", you'll see compatibility indicators:
@@ -68,7 +55,6 @@ When selecting a "Dedicated Completion Preset", you'll see compatibility indicat
 ## 🛠️ **Troubleshooting**
 
 ### Common Issues:
-- **Fields not hiding**: Click "Generate JavaScript" after changing gender-specific settings
 - **Alignment problems**: The enhanced alignment system fixes table spacing automatically
 - **Connection issues**: The enhanced version uses independent connections - no interference
 - **Template errors**: Use "Generate Template" to create properly formatted HTML
