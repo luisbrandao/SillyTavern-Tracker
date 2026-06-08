@@ -254,7 +254,7 @@ export async function generateTracker(mesNum, includedFields = FIELD_INCLUDE_OPT
  */
 async function generateSingleStageTracker(mesNum, includedFields, firstStageMessage = null) {
 	// Build system and request prompts
-	const systemPrompt = getGenerateSystemPrompt(mesNum, includedFields, firstStageMessage);
+	const systemPrompt = await getGenerateSystemPrompt(mesNum, includedFields, firstStageMessage);
 	const requestPrompt = getRequestPrompt(extensionSettings.generateRequestPrompt, mesNum, includedFields, firstStageMessage);
 
 	let responseLength = extensionSettings.responseLength > 0 ? extensionSettings.responseLength : null;
@@ -277,7 +277,7 @@ async function generateSingleStageTracker(mesNum, includedFields, firstStageMess
  */
 async function generateTwoStageTracker(mesNum, includedFields) {
 	// Build system and request prompts for message summarization
-	const systemPrompt = getMessageSummarizationSystemPrompt(mesNum, includedFields);
+	const systemPrompt = await getMessageSummarizationSystemPrompt(mesNum, includedFields);
 	const requestPrompt = getRequestPrompt(extensionSettings.messageSummarizationRequestPrompt, mesNum, includedFields);
 
 	let responseLength = extensionSettings.responseLength > 0 ? extensionSettings.responseLength : null;
@@ -355,15 +355,47 @@ async function sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseL
 // #region Tracker Prompt Functions
 
 /**
- * Constructs the generate tracker system prompt for the AI model based on the current mode. {{trackerSystemPrompt}}, {{characterDescriptions}}, {{trackerExamples}}, {{recentMessages}}, {{currentTracker}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{firstStageMessage}}
+ * Scans the recent chat messages for active World Info / lorebook entries and returns their
+ * combined text, so the tracker is built with the same lore context the roleplay sees. Runs as a
+ * dry run (emits no events) and never throws — returns "" if World Info is unavailable or errors.
+ * @param {number} mesNum - The message index up to which to scan.
+ * @returns {Promise<string>} The activated world info text, or "".
+ */
+async function getActiveWorldInfo(mesNum) {
+	try {
+		const ctx = getContext();
+		if (typeof ctx.getWorldInfoPrompt !== "function") return "";
+
+		// Same window the tracker feeds the model: recent non-system messages, tracker blocks stripped.
+		const messages = chat
+			.filter((c, index) => !c.is_system && index <= mesNum)
+			.slice(-extensionSettings.numberOfMessages)
+			.map((c) => `${c.name}: ${c.mes.replace(/<tracker>[\s\S]*?<\/tracker>/g, "").trim()}`);
+
+		if (messages.length === 0) return "";
+
+		// getWorldInfoPrompt expects the chat most-recent-first; dryRun=true so it emits no events.
+		const chatForWI = messages.slice().reverse();
+		const maxContext = Number(ctx.maxContext) || 8192;
+		const { worldInfoString } = await ctx.getWorldInfoPrompt(chatForWI, maxContext, true);
+		return (worldInfoString || "").trim();
+	} catch (e) {
+		warn(`[Tracker Enhanced] Failed to gather world info for tracker:`, e?.message);
+		return "";
+	}
+}
+
+/**
+ * Constructs the generate tracker system prompt for the AI model based on the current mode. {{trackerSystemPrompt}}, {{characterDescriptions}}, {{worldInfo}}, {{trackerExamples}}, {{recentMessages}}, {{currentTracker}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{firstStageMessage}}
  * Uses `extensionSettings.generateContextTemplate` and `extensionSettings.generateSystemPrompt`.
  * @param {number} mesNum
  * @param {string} includedFields
- * @returns {string} The system prompt.
+ * @returns {Promise<string>} The system prompt.
  */
-function getGenerateSystemPrompt(mesNum, includedFields = FIELD_INCLUDE_OPTIONS.DYNAMIC, firstStageMessage = null) {
+async function getGenerateSystemPrompt(mesNum, includedFields = FIELD_INCLUDE_OPTIONS.DYNAMIC, firstStageMessage = null) {
 	const trackerSystemPrompt = getSystemPrompt(extensionSettings.generateSystemPrompt, includedFields);
 	const characterDescriptions = getCharacterDescriptions();
+	const worldInfo = await getActiveWorldInfo(mesNum);
 	const trackerExamples = getExampleTrackers(includedFields);
 	const recentMessages = getRecentMessages(extensionSettings.generateRecentMessagesTemplate, mesNum, includedFields);
 	const currentTracker = getCurrentTracker(mesNum, includedFields);
@@ -373,6 +405,7 @@ function getGenerateSystemPrompt(mesNum, includedFields = FIELD_INCLUDE_OPTIONS.
 	const vars = {
 		trackerSystemPrompt,
 		characterDescriptions,
+		worldInfo,
 		trackerExamples,
 		recentMessages,
 		currentTracker,
@@ -392,10 +425,11 @@ function getGenerateSystemPrompt(mesNum, includedFields = FIELD_INCLUDE_OPTIONS.
  * @param {string} includedFields
  * @returns {string} The system prompt.
  */
-function getMessageSummarizationSystemPrompt(mesNum, includedFields) {
+async function getMessageSummarizationSystemPrompt(mesNum, includedFields) {
 	const trackerSystemPrompt = getSystemPrompt(extensionSettings.messageSummarizationSystemPrompt, includedFields);
 	const messageSummarizationSystemPrompt = getSystemPrompt(extensionSettings.messageSummarizationSystemPrompt, includedFields);
 	const characterDescriptions = getCharacterDescriptions();
+	const worldInfo = await getActiveWorldInfo(mesNum);
 	const trackerExamples = getExampleTrackers(includedFields);
 	const recentMessages = extensionSettings.messageSummarizationRecentMessagesTemplate ? getRecentMessages(extensionSettings.messageSummarizationRecentMessagesTemplate, mesNum, includedFields) || "" : "";
 	const currentTracker = getCurrentTracker(mesNum, includedFields);
@@ -406,6 +440,7 @@ function getMessageSummarizationSystemPrompt(mesNum, includedFields) {
 		trackerSystemPrompt,
 		messageSummarizationSystemPrompt,
 		characterDescriptions,
+		worldInfo,
 		trackerExamples,
 		recentMessages,
 		currentTracker,

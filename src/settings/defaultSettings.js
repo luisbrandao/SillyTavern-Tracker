@@ -37,6 +37,11 @@ const twoStageGenerateContextTemplate = `<|begin_of_text|><|start_header_id|>sys
 
 {{characterDescriptions}}
 
+### World Info
+<!-- Start of World Info -->
+{{worldInfo}}
+<!-- End of World Info -->
+
 ### Example Trackers
 <!-- Start of Example Trackers -->
 {{trackerExamples}}
@@ -103,6 +108,11 @@ const messageSummarizationContextTemplate = `<|begin_of_text|><|start_header_id|
 {{messageSummarizationSystemPrompt}}
 
 <!-- Start of Context -->
+
+### World Info
+<!-- Start of World Info -->
+{{worldInfo}}
+<!-- End of World Info -->
 
 ### Current Tracker
 <tracker>
@@ -207,6 +217,11 @@ const generateContextTemplate = `<|begin_of_text|><|start_header_id|>system<|end
 <!-- Start of Context -->
 
 {{characterDescriptions}}
+
+### World Info
+<!-- Start of World Info -->
+{{worldInfo}}
+<!-- End of World Info -->
 
 ### Example Trackers
 <!-- Start of Example Trackers -->
