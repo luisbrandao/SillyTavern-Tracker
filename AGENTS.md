@@ -7,8 +7,8 @@
 - UI assets remain in `html/settings.html`, `sass/style.scss`, and compiled `style.css`. Treat `docs/Tracker Documentation.pdf` as legacy; rely on `README.md` for current behaviour.
 
 ## Build, Test & Development Commands
-- `npx sass sass/style.scss style.css --no-source-map` rebuilds stylesheets (`--watch` for live edits).
-- After JS/HTML changes reload via SillyTavern `Settings → Extensions → Reload`.
+- **Do NOT rebuild `style.css` from `sass/style.scss`.** In this branch the SCSS is stale and incomplete: it is missing the tracker-interface layout, prompt-maker drag/drop, template-controls, reset, and compatibility rules, and it targets the wrong interface id (`#trackerInterface` instead of the real DOM id `#trackerEnhancedInterface`). `style.css` is the hand-maintained source of truth — edit it directly. Running `npx sass ...` will drop those rules and break the "Show message tracker" side window (garbled header, footer buttons jump to the top).
+- After JS/HTML/CSS changes reload via SillyTavern `Settings → Extensions → Reload`.
 - In the browser console inspect `window.trackerEnhanced` to view runtime state or toggle debug logging.
 
 ## Coding Style & Conventions
