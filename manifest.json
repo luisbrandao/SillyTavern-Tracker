@@ -5,7 +5,7 @@
 	"optional": [],
 	"js": "index.js",
 	"css": "style.css",
-	"author": "harrywenjie",
-	"version": "0.0.3",
-	"homePage": "https://github.com/harrywenjie/SillyTavern-Tracker-Enhanced"
+	"author": "techmago",
+	"version": "1.0.0",
+	"homePage": "https://github.com/luisbrandao/SillyTavern-Tracker-Enhanced"
 }
