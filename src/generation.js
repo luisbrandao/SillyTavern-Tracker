@@ -29,6 +29,34 @@ function getProfileIdByName(profileName) {
 }
 
 /**
+ * Resolves the maximum output tokens configured by a completion preset.
+ *
+ * The chat-completion request path (ChatCompletionService.presetToGeneratePayload) merges the
+ * caller's payload over the preset, so the `max_tokens` we pass to sendRequest overrides the
+ * preset's own value. Passing a hardcoded default therefore silently caps the response (the
+ * 1000-token cut-off). To honour the preset we read its max-tokens field and pass that explicitly.
+ * @param {object} ctx - SillyTavern context.
+ * @param {object} profile - The connection profile (its mode decides the preset manager type).
+ * @param {string} presetName - The completion preset name to look up.
+ * @returns {number|null} The preset's max output tokens, or null if it can't be determined.
+ */
+function resolvePresetMaxTokens(ctx, profile, presetName) {
+	if (!presetName) return null;
+	try {
+		const isChatCompletion = profile?.mode === "cc";
+		const presetManager = ctx.getPresetManager(isChatCompletion ? "openai" : "textgenerationwebui");
+		const preset = presetManager?.getCompletionPresetByName(presetName);
+		if (!preset) return null;
+		// Chat completion presets store the response cap in `openai_max_tokens`; text completion in `genamt`.
+		const max = isChatCompletion ? preset.openai_max_tokens : preset.genamt;
+		return typeof max === "number" && max > 0 ? max : null;
+	} catch (e) {
+		warn(`[Tracker Enhanced] Could not resolve max tokens from preset "${presetName}":`, e?.message);
+		return null;
+	}
+}
+
+/**
  * Replaces `{{key}}` placeholders in a template string with provided values.
  * @param {string} template - The template string containing placeholders.
  * @param {Object} vars - An object of key-value pairs to replace in the template.
@@ -70,6 +98,14 @@ function conditionalSection(template, sectionName, condition, content) {
  * @returns {Promise<string>} The generated response.
  */
 async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
+	// "current" means "use the connection profile's own preset". Any other value is a specific
+	// completion preset the user picked in the extension's "Dedicated Completion Preset" dropdown.
+	const usePreset = extensionSettings.selectedCompletionPreset && extensionSettings.selectedCompletionPreset !== "current";
+
+	// Restoration state for the temporary preset override (see below).
+	let overriddenProfile = null;
+	let originalPreset;
+
 	try {
 		log(`[Tracker Enhanced] 🚀 sendIndependentGenerationRequest called`);
 		
@@ -96,22 +132,52 @@ async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
 		}
 		
 		log(`[Tracker Enhanced] ✅ ConnectionManagerRequestService is available`);
+
+		// Fetch the live profile so we can (a) override its preset for this request and
+		// (b) read the effective preset's max tokens below.
+		const profile = ctx.ConnectionManagerRequestService.getProfile(profileId);
+
+		// ConnectionManagerRequestService.sendRequest always derives the completion preset from the
+		// connection profile itself (presetName: profile.preset) and offers no parameter to pass an
+		// arbitrary preset. To honour the "Dedicated Completion Preset" selection we temporarily point
+		// the live profile at the chosen preset for this single request, then restore it in `finally`.
+		// When the selection is "current" we leave the profile's own preset untouched.
+		if (usePreset) {
+			overriddenProfile = profile;
+			originalPreset = profile.preset;
+			profile.preset = extensionSettings.selectedCompletionPreset;
+			log(`[Tracker Enhanced] 🎯 Overriding completion preset for this request: "${extensionSettings.selectedCompletionPreset}" (profile default was "${originalPreset}")`);
+		} else {
+			log(`[Tracker Enhanced] 🎯 Using connection profile's default completion preset`);
+		}
+
+		// Resolve max output tokens. Prefer the explicit Response Length override; otherwise use the
+		// effective preset's own max tokens so the response isn't truncated. A hardcoded default here
+		// would override the preset on the chat-completion path and silently cap output.
+		const effectivePresetName = usePreset ? extensionSettings.selectedCompletionPreset : profile.preset;
+		let effectiveMaxTokens = maxTokens || resolvePresetMaxTokens(ctx, profile, effectivePresetName);
+		if (!effectiveMaxTokens) {
+			effectiveMaxTokens = 1000;
+			warn(`[Tracker Enhanced] ⚠️ Could not determine max tokens from preset "${effectivePresetName}"; falling back to ${effectiveMaxTokens}. Set a Response Length override or verify the preset.`);
+		}
+
 		log(`[Tracker Enhanced] 📤 About to call ctx.ConnectionManagerRequestService.sendRequest`);
 		log(`[Tracker Enhanced] Parameters:`, { 
 			profileId, 
 			promptLength: prompt?.length || 0, 
-			maxTokens,
+			maxTokens: effectiveMaxTokens,
 			selectedCompletionPreset: extensionSettings.selectedCompletionPreset
 		});
 		
-		// Use ConnectionManagerRequestService from context
+		// Use ConnectionManagerRequestService from context. includePreset is always true so a preset
+		// is sent in both modes (the profile's own preset, or our temporary override above).
 		const response = await ctx.ConnectionManagerRequestService.sendRequest(
 			profileId,
 			[{ role: 'user', content: prompt }],
-			maxTokens || 1000,
+			effectiveMaxTokens,
 			{
 				extractData: true,
-				includePreset: extensionSettings.selectedCompletionPreset !== "current",
+				includePreset: true,
 			}
 		);
 		
@@ -132,6 +198,12 @@ async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
 		
 		// Re-throw to be handled by calling function
 		throw err;
+	} finally {
+		// Always restore the profile's original preset, even on error, so we never leave the
+		// connection profile mutated for the rest of SillyTavern.
+		if (overriddenProfile) {
+			overriddenProfile.preset = originalPreset;
+		}
 	}
 }
 
