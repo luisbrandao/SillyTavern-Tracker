@@ -30,6 +30,7 @@
 ## Commit & PR Expectations
 - Follow history style: short imperative titles (e.g., `add createAndJoin`).
 - PRs should note motivation, UX impact, preset migration steps, and link relevant SillyTavern changes. Include screenshots or YAML snippets if UI output changes.
+- **Bump `version` in `manifest.json`** whenever you ship user-facing changes (features/fixes). Use semver: patch for fixes, minor for new features, major for breaking changes (removed fields/defaults). SillyTavern surfaces this version, so don't forget it before release.
 
 ## Migration Context
 - Development moved from Claude to Codex agents. Keep AGENTS.md updated with key learnings (like the tracker generation findings above) so future compactions retain context.
