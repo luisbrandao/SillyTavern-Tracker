@@ -44,6 +44,23 @@ const SYSTEM_MESSAGE_TYPES = {
 	ASSISTANT_NOTE: system_message_types.ASSISTANT_NOTE,
 };
 
+/**
+ * Restores the send/swipe buttons after the tracker's transient "busy" state WITHOUT emitting
+ * GENERATION_ENDED.
+ *
+ * Core's activateSendButtons() calls hideStopButton(), which emits GENERATION_ENDED whenever it
+ * hides a *visible* stop button. The tracker shows/hides the stop button at GENERATION_AFTER_COMMANDS
+ * — while a host generation (e.g. a Guided Generations swipe/response) is still in flight and before
+ * core has shown its own stop button — so that spurious GENERATION_ENDED would fire mid-generation and
+ * flush other extensions' ephemeral injects (e.g. Guided's `/inject ... ephemeral=true`), wiping their
+ * instructions out of the prompt. Pre-hiding the stop button makes hideStopButton()'s visibility guard
+ * a no-op, so activateSendButtons() still runs its remaining UI cleanup but emits no event.
+ */
+function restoreSendButtons() {
+	$("#mes_stop").css("display", "none");
+	activateSendButtons();
+}
+
 //#region Tracker Functions
 
 /**
@@ -283,7 +300,7 @@ async function handleStagedGeneration(type, options, dryRun) {
 
 	const mesId = getLastNonSystemMessageIndex();
 	if (mesId === -1) {
-		if (manageStopButton) activateSendButtons();
+		if (manageStopButton) restoreSendButtons();
 		return;
 	}
 
@@ -358,7 +375,7 @@ async function handleStagedGeneration(type, options, dryRun) {
 
 	await injectTracker(tracker, position);
 
-	if (manageStopButton) activateSendButtons();
+	if (manageStopButton) restoreSendButtons();
 }
 
 async function showManualTrackerPopup(mesId = null) {
@@ -430,7 +447,7 @@ export async function addTrackerToMessage(mesId) {
 		await saveChatConditional();
 		TrackerPreviewManager.updatePreview(mesId);
 
-		if (manageStopButton) activateSendButtons();
+		if (manageStopButton) restoreSendButtons();
 	};
 
 	if (extensionSettings.generationMode === generationModes.INLINE) {
@@ -442,7 +459,7 @@ export async function addTrackerToMessage(mesId) {
 		if(chat_metadata.tracker) chat_metadata.tracker.inlineTrackerId = null;
 		await saveChatConditional();
 
-		if (manageStopButton) activateSendButtons();
+		if (manageStopButton) restoreSendButtons();
 		return;
 	} else {
 		if(isSystemMessage(mesId)) return;
@@ -466,9 +483,9 @@ export async function addTrackerToMessage(mesId) {
 		}
 	}
 	} catch (e) {
-		if (manageStopButton) activateSendButtons();
+		if (manageStopButton) restoreSendButtons();
 	}
-	if (manageStopButton) activateSendButtons();
+	if (manageStopButton) restoreSendButtons();
 }
 
 //#endregion
