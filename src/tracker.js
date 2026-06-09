@@ -355,12 +355,21 @@ async function handleStagedGeneration(type, options, dryRun) {
 		position = 0;
 		tracker = lastMes.tracker;
 	} else {
+		// Deferred tracker generation for new responses.
+		//
+		// Previously we generated the upcoming message's tracker HERE — up front, blocking the main
+		// response — so clicking "send" produced a tracker first and only then started the reply.
+		// We now skip that auto-generation: the main prompt is injected with the LAST AVAILABLE
+		// tracker (the fallback below), the response generates immediately, and the fresh tracker for
+		// the new message is generated AFTER it is rendered, in addTrackerToMessage() (its `else`
+		// branch fires because no tempTracker is stashed here).
+		//
+		// Explicit, user-initiated trackers still apply up front: a command override
+		// (`/tracker-enhanced-override`) and the manual tracker popup are deliberate "before the
+		// response" inputs, so they are kept.
 		if(chat_metadata.tracker.cmdTrackerOverride) {
 			tracker = { ...chat_metadata.tracker.cmdTrackerOverride };
 			chat_metadata.tracker.cmdTrackerOverride = null;
-		} else if (shouldGenerateTracker(mesId + 1, type)) {
-			debug("Generating new tracker for message:", mesId);
-			tracker = await generateTracker(mesId);
 		} else if (shouldShowPopup(mesId + 1, type)) {
 			const manualTracker = await showManualTrackerPopup(mesId + 1);
 			if (manualTracker) tracker = manualTracker;
@@ -376,13 +385,21 @@ async function handleStagedGeneration(type, options, dryRun) {
 	}
 
 	if (!tracker) {
-		const lastMesWithTrackerIndex = getLastMessageWithTracker(chat, mesId);
+		// Deferred generation: never generate a tracker before the response. Reuse the most recent
+		// message that already has a tracker so the model still sees current state; the fresh tracker
+		// for this turn is generated afterwards in addTrackerToMessage() (post-response), which saves
+		// it to the message so the next turn has something to reuse here.
+		//
+		// The only gap is the very first message of a brand-new, tracker-less chat: there is nothing
+		// to reuse yet, so nothing is injected for that one turn. It self-heals from the next turn on,
+		// once the first post-response tracker has been saved.
+		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesId);
 
 		if (lastMesWithTrackerIndex !== null) {
 			const lastMesWithTracker = chat[lastMesWithTrackerIndex];
 
 			tracker = getCleanTracker(lastMesWithTracker.tracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON);
-			position = lastMesReverseIndex;
+			position = 0;
 		} else {
 			tracker = "";
 			position = 0;
