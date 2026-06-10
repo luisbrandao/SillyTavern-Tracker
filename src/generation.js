@@ -495,6 +495,23 @@ function getSystemPrompt(template, includedFields) {
 }
 
 /**
+ * Reads the character summary produced by the Tech-Summarize extension, if it's installed and
+ * populated. Tech-Summarize stores it at extension_settings['tech_summarize'].sections.characters.content
+ * (the same value backing its {{summary_characters}} macro). The tracker uses its own template engine,
+ * so the macro isn't resolved here — we read the stored value directly.
+ * @returns {string} The session character summary, or "" when absent/empty.
+ */
+function getSessionCharacters() {
+	try {
+		const content = getContext().extensionSettings?.["tech_summarize"]?.sections?.characters?.content;
+		return (content || "").trim();
+	} catch (e) {
+		warn(`[Tracker Enhanced] Failed to read Tech-Summarize character summary:`, e?.message);
+		return "";
+	}
+}
+
+/**
  * Retrieves character descriptions. {{char}}, {{charDescription}}
  */
 function getCharacterDescriptions() {
@@ -529,7 +546,16 @@ function getCharacterDescriptions() {
 			}) + "\n\n";
 	});
 
-	return charDescriptionString.trim();
+	let result = charDescriptionString.trim();
+
+	// Fold in the Tech-Summarize character summary when present, so the tracker stays grounded in the
+	// session's accumulated character state (important for world consistency on long RPs).
+	const sessionCharacters = getSessionCharacters();
+	if (sessionCharacters) {
+		result += `\n\n### Session Characters\n<!-- Start of Session Characters -->\n${sessionCharacters}\n<!-- End of Session Characters -->`;
+	}
+
+	return result.trim();
 }
 
 /**
