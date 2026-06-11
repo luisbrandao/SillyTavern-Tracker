@@ -15,7 +15,7 @@ export const OUTPUT_FORMATS = {
 	YAML: "yaml",
 };
 
-export const FIELD_PRESENCE_OPTIONS = {
+const FIELD_PRESENCE_OPTIONS = {
 	DYNAMIC: "DYNAMIC",
 	EPHEMERAL: "EPHEMERAL",
 	STATIC: "STATIC",
@@ -192,10 +192,9 @@ export function trackerExists(trackerInput, backendObject) {
  * @param {Object} backendObject - The backend object defining the tracker structure.
  * @param {string} includeFields - Which fields to include ('dynamic', 'static', 'all').
  * @param {string} outputFormat - The desired output format ('json' or 'yaml').
- * @param {boolean} preserveStructure - If true, replaces default values with placeholders (object keys remain).
  * @returns {Object|string} - A cleaned tracker in the specified format.
  */
-export function cleanTracker(trackerInput, backendObject, outputFormat = OUTPUT_FORMATS.JSON, preserveStructure = false) {
+export function cleanTracker(trackerInput, backendObject, outputFormat = OUTPUT_FORMATS.JSON) {
 	// Convert YAML to JSON if needed
 	const tracker = typeof trackerInput === "string" ? yamlToJSON(trackerInput) : trackerInput;
 
@@ -203,7 +202,7 @@ export function cleanTracker(trackerInput, backendObject, outputFormat = OUTPUT_
 	const defaultTracker = getDefaultTracker(backendObject, FIELD_INCLUDE_OPTIONS.ALL, OUTPUT_FORMATS.JSON);
 
 	// 1) Recursively remove default values
-	let cleaned = removeDefaults(tracker, defaultTracker, preserveStructure);
+	let cleaned = removeDefaults(tracker, defaultTracker);
 
 	// If the entire tracker was removed, return empty object or {} so we don't break usage
 	if (typeof cleaned === "undefined"){
@@ -519,7 +518,7 @@ function handleForEachArray(field, includeFields, index = null, trackerValue = n
 					extraFields[field.name] = extraFields[field.name] || {};
 					extraFields[field.name][key] = value;
 				}
-				result[key] = singleStringField ? [] : [];
+				result[key] = [];
 				continue;
 			}
 
@@ -589,7 +588,6 @@ function handleForEachArray(field, includeFields, index = null, trackerValue = n
 
 			if (singleStringField) {
 				const nf = nestedFieldArray[0];
-				const handler = FIELD_TYPES_HANDLERS[nf.type] || handleString;
 
 				let defaultArray = [];
 				if (index !== null && nf.exampleValues && nf.exampleValues[index]) {
@@ -715,23 +713,23 @@ function cleanEmptyObjects(obj) {
 	return obj;
 }
 
-function removeDefaults(currentValue, defaultValue, preserveStructure) {
+function removeDefaults(currentValue, defaultValue) {
 	if (_.isArray(currentValue) && _.isArray(defaultValue)) {
-		return cleanArray(currentValue, defaultValue, preserveStructure);
+		return cleanArray(currentValue, defaultValue);
 	}
 
 	if (_.isPlainObject(currentValue) && _.isPlainObject(defaultValue)) {
-		return cleanObject(currentValue, defaultValue, preserveStructure);
+		return cleanObject(currentValue, defaultValue);
 	}
 
 	if (_.isEqual(currentValue, defaultValue)) {
-		return preserveStructure ? getEmptyEquivalent(currentValue) : undefined;
+		return undefined;
 	}
 
 	return currentValue;
 }
 
-function cleanArray(arr, defaultArr, preserveStructure) {
+function cleanArray(arr, defaultArr) {
 	const cleanedItems = [];
 
 	for (let item of arr) {
@@ -741,14 +739,14 @@ function cleanArray(arr, defaultArr, preserveStructure) {
 		cleanedItems.push(item);
 	}
 
-	if (cleanedItems.length === 0 && !preserveStructure) {
+	if (cleanedItems.length === 0) {
 		return undefined;
 	}
 
 	return cleanedItems;
 }
 
-function cleanObject(obj, defaultObj, preserveStructure) {
+function cleanObject(obj, defaultObj) {
 	let hasRemainingKeys = false;
 	const result = {};
 
@@ -757,18 +755,15 @@ function cleanObject(obj, defaultObj, preserveStructure) {
 
 		const defaultValForKey = defaultObj.hasOwnProperty(key) ? defaultObj[key] : getEmptyEquivalent(obj[key]);
 
-		const cleanedValue = removeDefaults(obj[key], defaultValForKey, preserveStructure);
+		const cleanedValue = removeDefaults(obj[key], defaultValForKey);
 
 		if (typeof cleanedValue !== "undefined") {
 			hasRemainingKeys = true;
 			result[key] = cleanedValue;
-		} else if (preserveStructure) {
-			hasRemainingKeys = true;
-			result[key] = getEmptyEquivalent(obj[key]);
 		}
 	}
 
-	if (!hasRemainingKeys && !preserveStructure) {
+	if (!hasRemainingKeys) {
 		return undefined;
 	}
 

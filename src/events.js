@@ -1,13 +1,12 @@
 import { chat } from "../../../../../script.js";
 import { selected_group, is_group_generating } from "../../../../../scripts/group-chats.js";
-import { debug, getLastMessageWithTracker, getLastNonSystemMessageIndex, log } from "../lib/utils.js";
+import { debug, getLastMessageWithTracker, log } from "../lib/utils.js";
 import { isEnabled } from "./settings/settings.js";
 import { prepareMessageGeneration, addTrackerToMessage, clearInjects } from "./tracker.js";
 import { releaseGeneration } from "../lib/interconnection.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS, saveTracker } from "./trackerDataHandler.js";
 import { TrackerInterface } from "./ui/trackerInterface.js";
 import { extensionSettings } from "../index.js";
-import { TrackerPreviewManager } from "./ui/trackerPreviewManager.js";
 
 /**
  * Event handler for when the chat changes.
@@ -18,7 +17,6 @@ async function onChatChanged(args) {
 	if (!await isEnabled()) return;
 	log("Chat changed:", args);
 	updateTrackerInterface();
-	//TrackerPreviewManager.init();
 	releaseGeneration();
 }
 
@@ -55,28 +53,6 @@ async function onGenerateAfterCommands(type, options, dryRun) {
 }
 
 /**
- * Event handler for when a message is received.
- * @param {number} mesId - The message ID.
- */
-async function onMessageReceived(mesId) {
-	if (!await isEnabled() || !chat[mesId] || (chat[mesId].tracker && Object.keys(chat[mesId].tracker).length !== 0)) return;
-	log("MESSAGE_RECEIVED", mesId);
-	await addTrackerToMessage(mesId);
-	releaseGeneration();
-}
-
-/**
- * Event handler for when a message is sent.
- * @param {number} mesId - The message ID.
- */
-async function onMessageSent(mesId) {
-	if (!await isEnabled() || !chat[mesId] || (chat[mesId].tracker && Object.keys(chat[mesId].tracker).length !== 0)) return;
-	log("MESSAGE_SENT", mesId);
-	await addTrackerToMessage(mesId);
-	releaseGeneration();
-}
-
-/**
  * Event handler for when a character's message is rendered.
  */
 async function onCharacterMessageRendered(mesId) {
@@ -98,18 +74,11 @@ async function onUserMessageRendered(mesId) {
 	updateTrackerInterface();
 }
 
-async function generateAfterCombinePrompts(prompt) {
-	debug("GENERATE_AFTER_COMBINE_PROMPTS", {prompt});
-}
-
 export const eventHandlers = {
 	onChatChanged,
 	onGenerateAfterCommands,
-	onMessageReceived,
-	onMessageSent,
 	onCharacterMessageRendered,
 	onUserMessageRendered,
-	generateAfterCombinePrompts
 };
 
 function updateTrackerInterface() {

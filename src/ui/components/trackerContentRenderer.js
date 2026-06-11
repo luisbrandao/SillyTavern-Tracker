@@ -1,5 +1,4 @@
 import { extensionSettings } from "../../../index.js";
-import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS } from "../../trackerDataHandler.js";
 import { TrackerPromptMaker } from "./trackerPromptMaker.js";
 
 export class TrackerContentRenderer {
@@ -608,7 +607,7 @@ export class TrackerContentRenderer {
 	 */
 	tokenizeTemplate(template) {
 		const tokens = [];
-		const regex = /{{\s*(\/?)\s*(#?)\s*([\w.]+|\^)\s*(.*?)\s*}}/g;
+		const regex = /{{\s*(\/?)\s*(#?)\s*([\w.]+)\s*(.*?)\s*}}/g;
 		let cursor = 0;
 		let match;
 

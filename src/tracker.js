@@ -1,12 +1,12 @@
-import { saveChatConditional, chat, chat_metadata, setExtensionPrompt, extension_prompt_roles, deactivateSendButtons, activateSendButtons, getBiasStrings, system_message_types, sendSystemMessage, sendMessageAsUser, removeMacros, stopGeneration, extractMessageBias, messageFormatting } from "../../../../../script.js";
+import { saveChatConditional, chat, chat_metadata, setExtensionPrompt, extension_prompt_roles, deactivateSendButtons, activateSendButtons, getBiasStrings, system_message_types, sendSystemMessage, sendMessageAsUser, removeMacros, extractMessageBias, messageFormatting } from "../../../../../script.js";
 
 import { hasPendingFileAttachment } from "../../../../../scripts/chats.js";
 import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js";
 import { debug, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
 import { generateTracker, getRequestPrompt } from "./generation.js";
-import { generationModes, generationTargets, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
-import { jsonToYAML, yamlToJSON } from "../lib/ymlParser.js";
+import { generationModes, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
+import { jsonToYAML } from "../lib/ymlParser.js";
 import { FIELD_INCLUDE_OPTIONS, getDefaultTracker, OUTPUT_FORMATS, getTracker as getCleanTracker, trackerExists, cleanTracker } from "./trackerDataHandler.js";
 import { TrackerEditorModal } from "./ui/trackerEditorModal.js";
 import { TrackerPreviewManager } from "./ui/trackerPreviewManager.js";
@@ -19,29 +19,12 @@ const ACTION_TYPES = {
 	QUIET: "quiet",
 	IMPERSONATE: "impersonate",
 	ASK_COMMAND: "ask_command",
-	NONE: "none",
 };
 
 const EXTENSION_PROMPT_ROLES = {
 	SYSTEM: extension_prompt_roles.SYSTEM,
 	USER: extension_prompt_roles.USER,
 	ASSISTANT: extension_prompt_roles.ASSISTANT,
-};
-
-const SYSTEM_MESSAGE_TYPES = {
-	HELP: system_message_types.HELP,
-	WELCOME: system_message_types.WELCOME,
-	GROUP_GENERATING: system_message_types.GROUP_GENERATING,
-	EMPTY: system_message_types.EMPTY,
-	GENERIC: system_message_types.GENERIC,
-	NARRATOR: system_message_types.NARRATOR,
-	COMMENT: system_message_types.COMMENT,
-	SLASH_COMMANDS: system_message_types.SLASH_COMMANDS,
-	FORMATTING: system_message_types.FORMATTING,
-	HOTKEYS: system_message_types.HOTKEYS,
-	MACROS: system_message_types.MACROS,
-	WELCOME_PROMPT: system_message_types.WELCOME_PROMPT,
-	ASSISTANT_NOTE: system_message_types.ASSISTANT_NOTE,
 };
 
 /**
@@ -78,25 +61,10 @@ function serializeTracker(trackerObject) {
 //#region Tracker Functions
 
 /**
- * Retrieves the tracker object for a given message number.
- * @param {number} mesNum - The message number.
- * @returns {object} The tracker object.
- */
-export function getTracker(mesNum) {
-	let tracker = chat[mesNum]?.tracker;
-
-	if (!tracker) {
-		tracker = getDefaultTracker(extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, OUTPUT_FORMATS.JSON);
-	}
-
-	return tracker;
-}
-
-/**
  * Injects the inline prompt into the extension prompt system.
  * @param {boolean} clearTracker - If true, clears the inline prompt.
  */
-export async function injectInlinePrompt(clearTracker = false) {
+async function injectInlinePrompt(clearTracker = false) {
 	const inlinePrompt = clearTracker ? "" : getRequestPrompt(extensionSettings.inlineRequestPrompt, null, false);
 	if(!clearTracker) debug("Injecting inline prompt:", inlinePrompt);
 	await setExtensionPrompt("inlineTrackerEnhancedPrompt", inlinePrompt, 1, 0, true, EXTENSION_PROMPT_ROLES.SYSTEM);
@@ -124,12 +92,12 @@ function getTrackerInjectionRole() {
  * @param {object} tracker - The tracker object.
  * @param {number} position - The position to inject the tracker.
  */
-export async function injectTracker(tracker = "", position = 0) {
+async function injectTracker(tracker = "", position = 0) {
 	let trackerBlock = "";
 	const role = getTrackerInjectionRole();
 	if(trackerExists(tracker, extensionSettings.trackerDef) && tracker != "") {
 		// Clean to a JSON object (strips defaults), then serialize in the user's configured format.
-		const cleaned = cleanTracker(tracker, extensionSettings.trackerDef, OUTPUT_FORMATS.JSON, false);
+		const cleaned = cleanTracker(tracker, extensionSettings.trackerDef, OUTPUT_FORMATS.JSON);
 		if(cleaned && Object.keys(cleaned).length) {
 			const trackerText = serializeTracker(cleaned);
 			debug("Injecting tracker:", { tracker: trackerText, position, format: extensionSettings.trackerFormat, role: extensionSettings.trackerInjectionRole });
@@ -183,7 +151,7 @@ async function addInlineTrackers(lastMesId, noSave = false) {
  * Removes inline trackers from messages.
  * @param {boolean} noSave - If true, skips saving the chat.
  */
-export async function removeInlineTrackers(noSave = false) {
+async function removeInlineTrackers(noSave = false) {
 	const messages = chat
 		.slice()
 		.map((mes, index) => ({ index, mes }))
@@ -314,7 +282,6 @@ async function handleInlineGeneration(type) {
 				it.textContent = `${mes.swipe_id + 1}/${mes.swipes.length}`;
 			});
 		}
-		type = ACTION_TYPES.CONTINUE;
 	} else {
 		await refreshInlineTrackers(mesId, true);
 		await injectInlinePrompt();
@@ -469,7 +436,7 @@ async function sendUserMessage(type, options, dryRun) {
 
 		if ((textareaText !== "" || (hasPendingFileAttachment() && !noAttachTypes.includes(type))) && !options.automatic_trigger) {
 			if (messageBias && !removeMacros(textareaText)) {
-				sendSystemMessage(SYSTEM_MESSAGE_TYPES.GENERIC, " ", {
+				sendSystemMessage(system_message_types.GENERIC, " ", {
 					bias: messageBias,
 				});
 			} else {

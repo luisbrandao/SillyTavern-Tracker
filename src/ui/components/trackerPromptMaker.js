@@ -39,14 +39,6 @@ export class TrackerPromptMaker {
 		};
 	}
 
-	static get FIELD_INCLUDE_OPTIONS() {
-		return {
-			DYNAMIC: "dynamic",
-			STATIC: "static",
-			ALL: "all",
-		};
-	}
-
 	/**
 	 * Initializes the component by building the UI and populating with existing data if provided.
 	 * @param {Object} existingObject - Optional existing JSON object.
@@ -57,7 +49,7 @@ export class TrackerPromptMaker {
 			this.populateFromExistingObject(existingObject); // Prepopulate if data is provided.
 		} else {
 			// Initialize sortable after the UI is ready
-			this.makeFieldsSortable(this.fieldsContainer, this.backendObject);
+			this.makeFieldsSortable(this.fieldsContainer);
 		}
 	}
 
@@ -107,9 +99,8 @@ export class TrackerPromptMaker {
 	/**
 	 * Makes a given container and its nested containers sortable.
 	 * @param {jQuery} container - The container whose fields should be sortable.
-	 * @param {Object} parentBackendObject - The corresponding backend object section.
 	 */
-    makeFieldsSortable(container, parentBackendObject) {
+    makeFieldsSortable(container) {
         let dragStartInfo = null;
         
         container.on("mousedown", "> .field-wrapper > .name-dynamic-type-wrapper > .drag-handle", (event) => {
@@ -271,7 +262,7 @@ export class TrackerPromptMaker {
 	 * @param {string|null} fieldId - Optional field ID to use (maintains consistency when loading existing data).
 	 * @param {boolean} [isNewField=true] - Flag indicating if the field is new or being loaded from existing data.
 	 */
-	addField(parentObject = null, parentFieldId = null, fieldData = {}, fieldId = null, isNewField = true) {
+	addField(parentFieldId = null, fieldData = {}, fieldId = null) {
 		if (!fieldId) {
 			fieldId = `field-${this.fieldCounter++}`; // Generate a unique field ID.
 		} else {
@@ -401,10 +392,10 @@ export class TrackerPromptMaker {
 		// Add Nested Field Button
 		const addNestedFieldBtn = $('<button class="menu_button interactable">Add Nested Field</button>')
 			.on("click", () => {
-				this.addField(null, fieldId);
+				this.addField(fieldId);
 				// After adding a nested field, make it sortable
 				const nestedFieldData = this.getFieldDataById(fieldId).nestedFields;
-				this.makeFieldsSortable(nestedFieldsContainer, nestedFieldData);
+				this.makeFieldsSortable(nestedFieldsContainer);
 				this.rebuildBackendObjectFromDOM();
 			})
 			.hide(); // Initially hidden
@@ -465,7 +456,7 @@ export class TrackerPromptMaker {
 		// Make nested fields sortable if this field type allows nesting
 		if (TrackerPromptMaker.NESTING_FIELD_TYPES.includes(fieldData.type)) {
 			const nestedFieldData = this.getFieldDataById(fieldId).nestedFields;
-			this.makeFieldsSortable(nestedFieldsContainer, nestedFieldData);
+			this.makeFieldsSortable(nestedFieldsContainer);
 		}
 
 		// Populate example values if any
@@ -478,7 +469,7 @@ export class TrackerPromptMaker {
 		// Recursively build nested fields if any
 		if (fieldData.nestedFields && Object.keys(fieldData.nestedFields).length > 0) {
 			Object.entries(fieldData.nestedFields).forEach(([nestedFieldId, nestedFieldData]) => {
-				this.addField(null, fieldId, nestedFieldData, nestedFieldId, false);
+				this.addField(fieldId, nestedFieldData, nestedFieldId);
 			});
 		}
 	}
@@ -800,10 +791,10 @@ export class TrackerPromptMaker {
 			this.buildUI();
 
 			// Build fields from the existing object
-			this.buildFieldsFromObject(existingObject, null, null);
+			this.buildFieldsFromObject(existingObject);
 
 			// Make top-level container sortable
-			this.makeFieldsSortable(this.fieldsContainer, this.backendObject);
+			this.makeFieldsSortable(this.fieldsContainer);
 
 			debug("Populated from existing object.");
 		} catch (err) {
@@ -813,17 +804,12 @@ export class TrackerPromptMaker {
 	}
 
 	/**
-	 * Recursively builds fields from the existing object and updates the UI.
+	 * Builds top-level fields from the existing object and updates the UI.
 	 * @param {Object} obj - The object to build fields from.
-	 * @param {Object|null} parentObject - The parent object in the backendObject.
-	 * @param {string|null} parentFieldId - The ID of the parent field if any.
 	 */
-	buildFieldsFromObject(obj, parentObject, parentFieldId = null) {
+	buildFieldsFromObject(obj) {
 		Object.entries(obj).forEach(([fieldId, fieldData]) => {
-			// Use the appropriate parent object
-			const currentParentObject = parentObject ? parentObject : this.backendObject;
-			// Add the field (isNewField = false because we're loading existing data)
-			this.addField(currentParentObject, parentFieldId, fieldData, fieldId, false);
+			this.addField(null, fieldData, fieldId);
 		});
 	}
 
@@ -940,51 +926,36 @@ export class TrackerPromptMaker {
 			}
 			
 			// Try to access extension settings from the module
-			try {
-				// Import the extensionSettings from the main module
-				import('../../index.js').then(module => {
-					if (module.extensionSettings) {
-						module.extensionSettings.mesTrackerTemplate = generatedTemplate;
+			// Import the extensionSettings from the main module
+			import('../../index.js').then(module => {
+				if (module.extensionSettings) {
+					module.extensionSettings.mesTrackerTemplate = generatedTemplate;
+					if (typeof debug === 'function') {
+						debug('TrackerPromptMaker: Updated extension settings with template');
+					}
+
+					// Update the settings textarea if it exists
+					const templateTextarea = $("#tracker_enhanced_mes_tracker_template");
+					if (templateTextarea.length) {
+						templateTextarea.val(generatedTemplate);
 						if (typeof debug === 'function') {
-							debug('TrackerPromptMaker: Updated extension settings with template');
-						}
-						
-						// Update the settings textarea if it exists
-						const templateTextarea = $("#tracker_enhanced_mes_tracker_template");
-						if (templateTextarea.length) {
-							templateTextarea.val(generatedTemplate);
-							if (typeof debug === 'function') {
-								debug('TrackerPromptMaker: Updated settings textarea');
-							}
-						}
-						
-						// Try to save settings
-						if (typeof saveSettingsDebounced === 'function') {
-							saveSettingsDebounced();
-							if (typeof debug === 'function') {
-								debug('TrackerPromptMaker: Saved settings');
-							}
+							debug('TrackerPromptMaker: Updated settings textarea');
 						}
 					}
-				}).catch(err => {
-					if (typeof debug === 'function') {
-						debug('TrackerPromptMaker: Could not import extension settings:', err);
+
+					// Try to save settings
+					if (typeof saveSettingsDebounced === 'function') {
+						saveSettingsDebounced();
+						if (typeof debug === 'function') {
+							debug('TrackerPromptMaker: Saved settings');
+						}
 					}
-				});
-			} catch (importError) {
+				}
+			}).catch(err => {
 				if (typeof debug === 'function') {
-					debug('TrackerPromptMaker: Import not supported, trying fallback methods');
+					debug('TrackerPromptMaker: Could not import extension settings:', err);
 				}
-				
-				// Fallback: Update the textarea directly for manual editing
-				const templateTextarea = $("#tracker_enhanced_mes_tracker_template");
-				if (templateTextarea.length) {
-					templateTextarea.val(generatedTemplate);
-					if (typeof debug === 'function') {
-						debug('TrackerPromptMaker: Updated settings textarea via fallback');
-					}
-				}
-			}
+			});
 			
 			// Show success message
 			if (typeof toastr !== 'undefined') {

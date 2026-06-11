@@ -16,7 +16,6 @@ export class TrackerInterface {
         }
         TrackerInterface.instance = this;
 
-        this.schema = extensionSettings.trackerDef;
         this.renderer = new TrackerContentRenderer();
         this.container = null;
         this.tracker = null;
