@@ -18,6 +18,12 @@ export const trackerFormat = {
 	YAML: "YAML",
 };
 
+export const trackerInjectionRoles = {
+	SYSTEM: "system",
+	USER: "user",
+	ASSISTANT: "assistant",
+};
+
 export const PREVIEW_PLACEMENT = {
 	BEFORE: "before",
 	AFTER: "after",
@@ -937,6 +943,7 @@ export const defaultSettings = {
 	generationTarget: generationTargets.BOTH,
 	showPopupFor: generationTargets.NONE,
 	trackerFormat: trackerFormat.YAML,
+	trackerInjectionRole: trackerInjectionRoles.SYSTEM,
 
 	generationMode: generationModes.SINGLE_STAGE,
 

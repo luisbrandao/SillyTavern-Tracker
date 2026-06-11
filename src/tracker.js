@@ -5,7 +5,7 @@ import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js"
 import { debug, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
 import { generateTracker, getRequestPrompt } from "./generation.js";
-import { generationModes, generationTargets, trackerFormat } from "./settings/settings.js";
+import { generationModes, generationTargets, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
 import { jsonToYAML, yamlToJSON } from "../lib/ymlParser.js";
 import { FIELD_INCLUDE_OPTIONS, getDefaultTracker, OUTPUT_FORMATS, getTracker as getCleanTracker, trackerExists, cleanTracker } from "./trackerDataHandler.js";
 import { TrackerEditorModal } from "./ui/trackerEditorModal.js";
@@ -103,23 +103,41 @@ export async function injectInlinePrompt(clearTracker = false) {
 }
 
 /**
+ * Resolves the configured "Tracker Injection Role" setting to a core extension prompt role.
+ * System injects a nameless narrator block that some backends/instruct formats merge into the
+ * adjacent turn; User/Assistant make the tracker its own named message in the chat history.
+ * @returns {number} The extension prompt role.
+ */
+function getTrackerInjectionRole() {
+	switch (extensionSettings.trackerInjectionRole) {
+		case trackerInjectionRoles.USER:
+			return EXTENSION_PROMPT_ROLES.USER;
+		case trackerInjectionRoles.ASSISTANT:
+			return EXTENSION_PROMPT_ROLES.ASSISTANT;
+		default:
+			return EXTENSION_PROMPT_ROLES.SYSTEM;
+	}
+}
+
+/**
  * Injects the tracker into the extension prompt system.
  * @param {object} tracker - The tracker object.
  * @param {number} position - The position to inject the tracker.
  */
 export async function injectTracker(tracker = "", position = 0) {
 	let trackerBlock = "";
+	const role = getTrackerInjectionRole();
 	if(trackerExists(tracker, extensionSettings.trackerDef) && tracker != "") {
 		// Clean to a JSON object (strips defaults), then serialize in the user's configured format.
 		const cleaned = cleanTracker(tracker, extensionSettings.trackerDef, OUTPUT_FORMATS.JSON, false);
 		if(cleaned && Object.keys(cleaned).length) {
 			const trackerText = serializeTracker(cleaned);
-			debug("Injecting tracker:", { tracker: trackerText, position, format: extensionSettings.trackerFormat });
+			debug("Injecting tracker:", { tracker: trackerText, position, format: extensionSettings.trackerFormat, role: extensionSettings.trackerInjectionRole });
 			trackerBlock = `<tracker>\n${trackerText}\n</tracker>`;
 		}
 	}
 	position = Math.max(extensionSettings.minimumDepth, position);
-	await setExtensionPrompt("trackerEnhanced", trackerBlock, 1, position, true, EXTENSION_PROMPT_ROLES.SYSTEM);
+	await setExtensionPrompt("trackerEnhanced", trackerBlock, 1, position, true, role);
 }
 
 /**

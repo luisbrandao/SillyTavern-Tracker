@@ -8,7 +8,7 @@ import { generationCaptured } from "../../lib/interconnection.js";
 import { TrackerPromptMakerModal } from "../ui/trackerPromptMakerModal.js";
 import { TrackerTemplateGenerator } from "../ui/components/trackerTemplateGenerator.js";
 
-export { generationModes, generationTargets, trackerFormat } from "./defaultSettings.js";
+export { generationModes, generationTargets, trackerFormat, trackerInjectionRoles } from "./defaultSettings.js";
 
 /**
  * Checks if the extension is enabled.
@@ -121,6 +121,7 @@ function setSettingsInitialValues() {
 	$("#tracker_enhanced_generation_target").val(extensionSettings.generationTarget);
 	$("#tracker_enhanced_show_popup_for").val(extensionSettings.showPopupFor);
 	$("#tracker_enhanced_format").val(extensionSettings.trackerFormat);
+	$("#tracker_enhanced_injection_role").val(extensionSettings.trackerInjectionRole);
 	$("#tracker_enhanced_debug").prop("checked", extensionSettings.debugMode);
 
 	// Set other settings fields
@@ -172,6 +173,7 @@ function registerSettingsListeners() {
 	$("#tracker_enhanced_generation_target").on("change", onSettingSelectChange("generationTarget"));
 	$("#tracker_enhanced_show_popup_for").on("change", onSettingSelectChange("showPopupFor"));
 	$("#tracker_enhanced_format").on("change", onSettingSelectChange("trackerFormat"));
+	$("#tracker_enhanced_injection_role").on("change", onSettingSelectChange("trackerInjectionRole"));
 	$("#tracker_enhanced_debug").on("input", onSettingCheckboxInput("debugMode"));
 
 	$("#tracker_enhanced_context_prompt").on("input", onSettingInputareaInput("generateContextTemplate"));
