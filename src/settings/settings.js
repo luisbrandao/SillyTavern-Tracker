@@ -38,11 +38,18 @@ export async function initSettings() {
 	if (!currentSettings.trackerDef) {
 		const allowedKeys = ["enabled", "generateContextTemplate", "generateSystemPrompt", "generateRequestPrompt", "characterDescriptionTemplate", "mesTrackerTemplate", "numberOfMessages", "responseLength", "debugMode"];
 
+		// `key in currentSettings` (not ||) so legacy falsy values survive the migration —
+		// `enabled: false`, `debugMode: false` and `responseLength: 0` used to be reset to defaults.
 		const newSettings = {
 			...defaultSettings,
-			...Object.fromEntries(allowedKeys.map((key) => [key, currentSettings[key] || defaultSettings[key]])),
-			oldSettings: currentSettings,
+			...Object.fromEntries(allowedKeys.map((key) => [key, key in currentSettings ? currentSettings[key] : defaultSettings[key]])),
 		};
+
+		// Only keep a migration backup when there was actually something to migrate; a fresh
+		// install used to store `oldSettings: {}` forever.
+		if (Object.keys(currentSettings).length > 0) {
+			newSettings.oldSettings = currentSettings;
+		}
 
 		for (const key in extensionSettings) {
 			if (!(key in newSettings)) {
@@ -55,6 +62,15 @@ export async function initSettings() {
 		migrateIsDynamicToPresence(extensionSettings);
 
 		Object.assign(extensionSettings, defaultSettings, currentSettings);
+
+		// The user's saved `presets` map fully shadows the default one, so default presets added in
+		// newer versions were invisible to existing installs. Merge in the missing ones (user
+		// presets, including modified copies of default ones, always win).
+		for (const [name, preset] of Object.entries(defaultSettings.presets)) {
+			if (!(name in extensionSettings.presets)) {
+				extensionSettings.presets[name] = preset;
+			}
+		}
 	}
 
 	saveSettingsDebounced();
@@ -236,22 +252,20 @@ function initializeOverridesDropdowns() {
 	try {
 		const ctx = getContext();
 		const connectionManager = ctx.extensionSettings.connectionManager;
-		if(connectionManager.profiles.length === 0 && extensionSettings.enabled) {
+		// No profiles -> nothing to resolve, regardless of enabled state. (The old guard also
+		// required `enabled`, so a disabled extension with no profiles fell through and threw.)
+		if(!connectionManager?.profiles?.length) {
 			return;
 		}
 		updateConnectionProfileDropdown();
-	
-		let actualSelectedProfile;
-		if(extensionSettings.selectedProfile === 'current') {
-			actualSelectedProfile = connectionManager.profiles.find(x => x.id === connectionManager.selectedProfile);
+
+		const actualSelectedProfile = extensionSettings.selectedProfile === 'current'
+			? connectionManager.profiles.find(x => x.id === connectionManager.selectedProfile)
+			: connectionManager.profiles.find(x => x.name === extensionSettings.selectedProfile);
+		if (actualSelectedProfile) {
 			extensionSettings.selectedProfileApi = actualSelectedProfile.api;
 			extensionSettings.selectedProfileMode = actualSelectedProfile.mode;
-	
-		} else {
-			actualSelectedProfile = connectionManager.profiles.find(x => x.name === extensionSettings.selectedProfile);
-			extensionSettings.selectedProfileApi = actualSelectedProfile.api;
-			extensionSettings.selectedProfileMode = actualSelectedProfile.mode;
-			}
+		}
 		debug("Selected profile:", { actualSelectedProfile, extensionSettings });
 		updateCompletionPresetsDropdown();
 	} catch(e) {

@@ -2,7 +2,7 @@ import { saveChatConditional, chat, chat_metadata, setExtensionPrompt, extension
 
 import { hasPendingFileAttachment } from "../../../../../scripts/chats.js";
 import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js";
-import { debug, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
+import { debug, error, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
 import { generateTracker, getRequestPrompt } from "./generation.js";
 import { generationModes, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
@@ -65,7 +65,9 @@ function serializeTracker(trackerObject) {
  * @param {boolean} clearTracker - If true, clears the inline prompt.
  */
 async function injectInlinePrompt(clearTracker = false) {
-	const inlinePrompt = clearTracker ? "" : getRequestPrompt(extensionSettings.inlineRequestPrompt, null, false);
+	// FIELD_INCLUDE_OPTIONS.DYNAMIC matches the field set used by staged generation; the old `false`
+	// argument matched no include option, so {{trackerFieldPrompt}} always expanded to an empty string.
+	const inlinePrompt = clearTracker ? "" : getRequestPrompt(extensionSettings.inlineRequestPrompt, null, FIELD_INCLUDE_OPTIONS.DYNAMIC);
 	if(!clearTracker) debug("Injecting inline prompt:", inlinePrompt);
 	await setExtensionPrompt("inlineTrackerEnhancedPrompt", inlinePrompt, 1, 0, true, EXTENSION_PROMPT_ROLES.SYSTEM);
 }
@@ -234,9 +236,8 @@ export async function prepareMessageGeneration(type, options, dryRun) {
  */
 async function handleInlineGeneration(type) {
 	const mesId = getLastNonSystemMessageIndex();
-	if (type === ACTION_TYPES.CONTINUE) {
-		await refreshInlineTrackers(mesId - 1, true);
-	}
+	// Note: CONTINUE deliberately falls through to the trailing else (refresh up to mesId + inline
+	// prompt). An older version also refreshed up to mesId-1 first, which the else immediately superseded.
 	if ([ACTION_TYPES.SWIPE, ACTION_TYPES.REGENERATE].includes(type)) {
 		await refreshInlineTrackers(mesId - 1, true);
 		const mes = chat[mesId];
@@ -454,42 +455,41 @@ export async function addTrackerToMessage(mesId) {
 	const manageStopButton = $("#mes_stop").css("display") === "none";
 	if (manageStopButton) deactivateSendButtons();
 	try {
+		/**
+		 * Saves the tracker to the message and updates the chat metadata.
+		 * @param {number} mesId - The message ID.
+		 * @param {object} tracker - The tracker object.
+		 */
+		const saveTrackerToMessage = async (mesId, tracker) => {
+			debug("Adding tracker to message:", { mesId, mes: chat[mesId], tracker });
+			chat[mesId].tracker = tracker;
+			if(typeof chat_metadata.tracker !== "undefined"){
+				chat_metadata.tracker.tempTrackerId = null;
+				chat_metadata.tracker.tempTracker = null;
+				chat_metadata.tracker.cmdTrackerOverride = null;
+			}
+			await saveChatConditional();
+			TrackerPreviewManager.updatePreview(mesId);
+		};
 
-	/**
-	 * Saves the tracker to the message and updates the chat metadata.
-	 * @param {number} mesId - The message ID.
-	 * @param {object} tracker - The tracker object.
-	 */
-	const saveTrackerToMessage = async (mesId, tracker) => {
-		debug("Adding tracker to message:", { mesId, mes: chat[mesId], tracker });
-		chat[mesId].tracker = tracker;
-		if(typeof chat_metadata.tracker !== "undefined"){
-			chat_metadata.tracker.tempTrackerId = null;
-			chat_metadata.tracker.tempTracker = null;
-			chat_metadata.tracker.cmdTrackerOverride = null;
+		if (extensionSettings.generationMode === generationModes.INLINE) {
+			const tempId = chat_metadata?.tracker?.inlineTrackerId ?? null;
+			// tempId null means no inline session is pending; without the guard, null arithmetic in
+			// getNextNonSystemMessageIndex (null + 1 === 1) would match message 1 and run a pointless extraction.
+			if (tempId != null && getNextNonSystemMessageIndex(tempId) === mesId) {
+				await extractAndSaveInlineTracker(mesId, true);
+				await removeInlineTrackers(true);
+			}
+			if(chat_metadata.tracker) chat_metadata.tracker.inlineTrackerId = null;
+			await saveChatConditional();
+			return;
 		}
-		await saveChatConditional();
-		TrackerPreviewManager.updatePreview(mesId);
 
-		if (manageStopButton) restoreSendButtons();
-	};
-
-	if (extensionSettings.generationMode === generationModes.INLINE) {
-		const tempId = chat_metadata?.tracker?.inlineTrackerId ?? null;
-		if (getNextNonSystemMessageIndex(tempId) === mesId) {
-			await extractAndSaveInlineTracker(mesId, true);
-			await removeInlineTrackers(true);
-		}
-		if(chat_metadata.tracker) chat_metadata.tracker.inlineTrackerId = null;
-		await saveChatConditional();
-
-		if (manageStopButton) restoreSendButtons();
-		return;
-	} else {
 		if(isSystemMessage(mesId)) return;
+
 		const tempId = chat_metadata?.tracker?.tempTrackerId ?? null;
 		if(chat_metadata?.tracker?.cmdTrackerOverride) {
-			saveTrackerToMessage(mesId, chat_metadata.tracker.cmdTrackerOverride);
+			await saveTrackerToMessage(mesId, chat_metadata.tracker.cmdTrackerOverride);
 		} else if (tempId != null) {
 			debug("Checking for temp tracker match", { mesId, tempId });
 			const trackerMesId = isSystemMessage(tempId) ? getNextNonSystemMessageIndex(tempId) : tempId;
@@ -505,11 +505,11 @@ export async function addTrackerToMessage(mesId) {
 				await saveTrackerToMessage(mesId, tracker);
 			}
 		}
-	}
 	} catch (e) {
+		error("Failed to add tracker to message:", { mesId, e });
+	} finally {
 		if (manageStopButton) restoreSendButtons();
 	}
-	if (manageStopButton) restoreSendButtons();
 }
 
 /**

@@ -12,12 +12,17 @@ import { extensionSettings } from "../index.js";
  * Event handler for when the chat changes.
  * @param {object} args - The event arguments.
  */
-async function onChatChanged(args) { 
+async function onChatChanged(args) {
 	await clearInjects();
+	// isEnabled() CAPTURES the generation mutex when it returns true; every path past this
+	// point must release it (finally), or other mutex-aware extensions see it held forever.
 	if (!await isEnabled()) return;
-	log("Chat changed:", args);
-	updateTrackerInterface();
-	releaseGeneration();
+	try {
+		log("Chat changed:", args);
+		updateTrackerInterface();
+	} finally {
+		releaseGeneration();
+	}
 }
 
 /**
@@ -53,25 +58,36 @@ async function onGenerateAfterCommands(type, options, dryRun) {
 }
 
 /**
+ * Shared handler for rendered messages: generate/attach a tracker if the message lacks one.
+ * isEnabled() captures the generation mutex when it returns true, so once past that guard the
+ * release MUST run on every path (the old per-handler guards returned early and leaked it).
+ * @param {string} eventName - Name used for logging.
+ * @param {number} mesId - The message ID.
+ */
+async function onMessageRendered(eventName, mesId) {
+	if (!await isEnabled()) return;
+	try {
+		if (!chat[mesId] || (chat[mesId].tracker && Object.keys(chat[mesId].tracker).length !== 0)) return;
+		log(eventName, mesId);
+		await addTrackerToMessage(mesId);
+		updateTrackerInterface();
+	} finally {
+		releaseGeneration();
+	}
+}
+
+/**
  * Event handler for when a character's message is rendered.
  */
 async function onCharacterMessageRendered(mesId) {
-	if (!await isEnabled() || !chat[mesId] || (chat[mesId].tracker && Object.keys(chat[mesId].tracker).length !== 0)) return;
-	log("CHARACTER_MESSAGE_RENDERED");
-	await addTrackerToMessage(mesId);
-	releaseGeneration();
-	updateTrackerInterface();
+	await onMessageRendered("CHARACTER_MESSAGE_RENDERED", mesId);
 }
 
 /**
  * Event handler for when a user's message is rendered.
  */
 async function onUserMessageRendered(mesId) {
-	if (!await isEnabled() || !chat[mesId] || (chat[mesId].tracker && Object.keys(chat[mesId].tracker).length !== 0)) return;
-	log("USER_MESSAGE_RENDERED");
-	await addTrackerToMessage(mesId);
-	releaseGeneration();
-	updateTrackerInterface();
+	await onMessageRendered("USER_MESSAGE_RENDERED", mesId);
 }
 
 export const eventHandlers = {

@@ -392,10 +392,9 @@ export class TrackerPromptMaker {
 		// Add Nested Field Button
 		const addNestedFieldBtn = $('<button class="menu_button interactable">Add Nested Field</button>')
 			.on("click", () => {
+				// addField() already makes the nested container sortable; re-initializing here
+				// stacked duplicate delegated mousedown/mouseup handlers on every click.
 				this.addField(fieldId);
-				// After adding a nested field, make it sortable
-				const nestedFieldData = this.getFieldDataById(fieldId).nestedFields;
-				this.makeFieldsSortable(nestedFieldsContainer);
 				this.rebuildBackendObjectFromDOM();
 			})
 			.hide(); // Initially hidden
@@ -455,7 +454,6 @@ export class TrackerPromptMaker {
 
 		// Make nested fields sortable if this field type allows nesting
 		if (TrackerPromptMaker.NESTING_FIELD_TYPES.includes(fieldData.type)) {
-			const nestedFieldData = this.getFieldDataById(fieldId).nestedFields;
 			this.makeFieldsSortable(nestedFieldsContainer);
 		}
 
@@ -930,36 +928,24 @@ export class TrackerPromptMaker {
 			import('../../index.js').then(module => {
 				if (module.extensionSettings) {
 					module.extensionSettings.mesTrackerTemplate = generatedTemplate;
-					if (typeof debug === 'function') {
-						debug('TrackerPromptMaker: Updated extension settings with template');
-					}
+					debug('TrackerPromptMaker: Updated extension settings with template');
 
-					// Update the settings textarea if it exists
+					// Update the settings textarea and fire its input handler, which persists the
+					// setting via the normal settings pipeline. (The old code checked for a global
+					// saveSettingsDebounced that is never in scope here, so nothing was ever saved.)
 					const templateTextarea = $("#tracker_enhanced_mes_tracker_template");
 					if (templateTextarea.length) {
-						templateTextarea.val(generatedTemplate);
-						if (typeof debug === 'function') {
-							debug('TrackerPromptMaker: Updated settings textarea');
-						}
-					}
-
-					// Try to save settings
-					if (typeof saveSettingsDebounced === 'function') {
-						saveSettingsDebounced();
-						if (typeof debug === 'function') {
-							debug('TrackerPromptMaker: Saved settings');
-						}
+						templateTextarea.val(generatedTemplate).trigger("input");
+						debug('TrackerPromptMaker: Updated settings textarea and triggered save');
 					}
 				}
 			}).catch(err => {
-				if (typeof debug === 'function') {
-					debug('TrackerPromptMaker: Could not import extension settings:', err);
-				}
+				debug('TrackerPromptMaker: Could not import extension settings:', err);
 			});
 			
 			// Show success message
 			if (typeof toastr !== 'undefined') {
-				toastr.success('Template generated and applied successfully! Please save your settings.', 'Template Generation');
+				toastr.success('Template generated, applied, and saved.', 'Template Generation');
 			} else {
 				console.log('Template Generation: Template generated and applied successfully!');
 			}
