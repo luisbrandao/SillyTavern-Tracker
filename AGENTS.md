@@ -23,6 +23,11 @@
 - `addTrackerToMessage` writes tracker data before the DOM exists; previews/interface updates must run in `onUserMessageRendered`/`onCharacterMessageRendered`. Skipping those handlers after a tracker exists hides UI updates.
 - When investigating tracker gaps, capture the full console sequence (chat open → user turn → character reply). Two sequential generation calls are expected in single-stage mode: one for the previous message, one for the newly rendered message. Only unexpected dry-run omissions should be treated as regressions.
 
+## Injection & Prompt Pipeline Notes (2026-06)
+- `injectTracker()` uses `setExtensionPrompt(..., IN_CHAT, depth, true, role)` with the role from the `trackerInjectionRole` setting. For chat completion APIs the injection becomes its own `{role, content}` message via core's `populationInjectionPrompts()` (`public/scripts/openai.js`), NOT `doChatInject()` (text completion only).
+- A "separate tracker message" cannot be guaranteed on alternation-enforcing backends: ST's server (`src/prompt-converters.js`, e.g. `convertClaudeMessages`/`mergeMessages`) converts mid-chat `system` messages to `user` and then unconditionally merges consecutive same-role messages. So System/User-role injections get glued into the player's user turn there — that is core server behavior, not an extension bug; don't try to refactor it away client-side.
+- Assistant role is the only option that keeps the tracker out of the player's turn on those backends (it merges into the end of the character's previous message; on OpenAI-compatible APIs it stays separate). `injectTracker()` clamps assistant-role injections to depth ≥ 1 because a trailing assistant message acts as a Claude prefill and the model continues writing from the tracker.
+
 ## Testing Workflow
 - Manual validation only: stage chats, send user/character turns, run `/tracker save`, inspect preview pane, and watch console for `[tracker-enhanced]` logs or unexpected mutex captures.
 - For regression checks, confirm both standalone tracker interface updates and inline preview rendering for freshly generated messages.

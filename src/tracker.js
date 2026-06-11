@@ -137,6 +137,12 @@ export async function injectTracker(tracker = "", position = 0) {
 		}
 	}
 	position = Math.max(extensionSettings.minimumDepth, position);
+	// An assistant-role injection at depth 0 would be the final message in the prompt: Claude-style
+	// backends treat a trailing assistant message as a prefill and continue writing from the tracker
+	// instead of answering the player. Keep it at least one message up.
+	if (role === EXTENSION_PROMPT_ROLES.ASSISTANT) {
+		position = Math.max(1, position);
+	}
 	await setExtensionPrompt("trackerEnhanced", trackerBlock, 1, position, true, role);
 }
 
