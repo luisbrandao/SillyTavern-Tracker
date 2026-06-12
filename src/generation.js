@@ -314,9 +314,10 @@ async function sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseL
 		try {
 			if(extensionSettings.trackerFormat == trackerFormat.JSON) tracker = unescapeJsonString(tracker);
 			const trackerContent = tracker.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
-			let result = trackerContent ? trackerContent[1].trim() : null;
-			if(extensionSettings.trackerFormat == trackerFormat.YAML) result = yamlToJSON(result);
-			newTracker = JSON.parse(result);
+			const result = trackerContent ? trackerContent[1].trim() : null;
+			// yamlToJSON returns the parsed object (and throws on non-string/garbage input,
+			// which the catch below turns into the parse-failure toast).
+			newTracker = extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(result) : JSON.parse(result);
 			log(`[Tracker Enhanced] ✅ Successfully parsed tracker response from independent connection`);
 		} catch (e) {
 			error(`[Tracker Enhanced] ❌ Failed to parse tracker from independent connection:`, tracker, e);
@@ -339,9 +340,8 @@ async function sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseL
 		try {
 			if(extensionSettings.trackerFormat == trackerFormat.JSON) tracker = unescapeJsonString(tracker);
 			const trackerContent = tracker.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
-			let result = trackerContent ? trackerContent[1].trim() : null;
-			if(extensionSettings.trackerFormat == trackerFormat.YAML) result = yamlToJSON(result);
-			newTracker = JSON.parse(result);
+			const result = trackerContent ? trackerContent[1].trim() : null;
+			newTracker = extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(result) : JSON.parse(result);
 			log(`[Tracker Enhanced] ✅ Successfully parsed tracker response from fallback method`);
 		} catch (e) {
 			error(`[Tracker Enhanced] ❌ Failed to parse tracker from fallback method:`, tracker, e);

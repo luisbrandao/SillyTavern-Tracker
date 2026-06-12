@@ -4,6 +4,7 @@
 - `index.js` wires SillyTavern events, generation mutex listeners, and slash commands into the extension entry point.
 - Core logic under `src/`: `tracker.js` orchestrates generation/injection, `generation.js` handles independent connection requests, `trackerDataHandler.js` manages schema reconciliation, and `ui/` + `settings/` hold modals, previews, and defaults.
 - Shared helpers live in `lib/` (`utils.js`, `interconnection.js`, `ymlParser.js`); reuse them before adding new utilities.
+- `lib/ymlParser.js` is a thin wrapper over SillyTavern's bundled `yaml` package (`import { yaml } from "../../../../../lib.js"`); the old hand-rolled parser corrupted commas/`#`/quotes/types. Despite the legacy name, `yamlToJSON()` returns the parsed OBJECT (and throws on garbage); `jsonToYAML()` emits standard block-style YAML, so newly serialized trackers look different from old inline-array YAML but both parse fine.
 - UI assets remain in `html/settings.html`, `sass/style.scss`, and compiled `style.css`. Treat `docs/Tracker Documentation.pdf` as legacy; rely on `README.md` for current behaviour.
 
 ## Build, Test & Development Commands
