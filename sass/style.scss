@@ -3,9 +3,37 @@
 	flex-direction: column;
 	padding: 10px;
 	gap: 10px;
+	#trackerInterfaceHeaderBar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+		// Leave room for the absolutely-positioned close (X) button in the
+		// control bar so the toggle never clips it.
+		padding-right: 25px;
+	}
+
 	#trackerInterfaceHeader {
 		font-size: 17.55px;
 		font-weight: 700;
+	}
+
+	#trackerInterfaceEnableToggle {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		cursor: pointer;
+		font-size: 0.9em;
+		white-space: nowrap;
+		color: var(--fullred);
+
+		&.toggleEnabled {
+			color: var(--active);
+		}
+
+		i {
+			font-size: 1.4em;
+		}
 	}
 
 	#trackerInterfaceFooter {

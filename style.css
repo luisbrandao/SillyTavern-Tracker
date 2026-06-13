@@ -7,10 +7,10 @@
 }
 #trackerEnhancedInterface #trackerInterfaceHeaderBar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  padding-right: 25px;
 }
 #trackerEnhancedInterface #trackerInterfaceHeader {
   font-size: 17.55px;
