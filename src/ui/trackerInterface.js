@@ -2,7 +2,7 @@ import { animation_duration, chat } from "../../../../../../script.js";
 import { dragElement } from "../../../../../../scripts/RossAscends-mods.js";
 import { loadMovingUIState } from "../../../../../../scripts/power-user.js";
 import { extensionSettings } from "../../index.js";
-import { error, getPreviousNonSystemMessageIndex, getLastNonSystemMessageIndex, debug, getLastMessageWithTracker } from "../../lib/utils.js";
+import { error, getPreviousNonSystemMessageIndex, getLastNonSystemMessageIndex, debug } from "../../lib/utils.js";
 import { generateTracker } from "../generation.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS, saveTracker } from "../trackerDataHandler.js";
 import { TrackerContentRenderer } from './components/trackerContentRenderer.js';
@@ -299,7 +299,10 @@ export class TrackerInterface {
      */
     static initializeTrackerButtons() {
         const openTrackerInterface = (requestedMesId = null) => {
-            let mesId = Number.isInteger(requestedMesId) && requestedMesId >= 0 ? requestedMesId : getLastMessageWithTracker();
+            // Default to the current (last) message rather than the last message that
+            // happens to have a tracker, so opening the interface shows the tracker for
+            // where the chat actually is — empty if none has been generated yet.
+            let mesId = Number.isInteger(requestedMesId) && requestedMesId >= 0 ? requestedMesId : getLastNonSystemMessageIndex();
 
             if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) {
                 mesId = getLastNonSystemMessageIndex();
