@@ -7,6 +7,7 @@ import { generateTracker } from "../generation.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS, saveTracker } from "../trackerDataHandler.js";
 import { TrackerContentRenderer } from './components/trackerContentRenderer.js';
 import { removeTrackerFromMessage } from "../tracker.js";
+import { toggleExtension } from "../settings/settings.js";
 import { callGenericPopup, POPUP_TYPE } from "../../../../../popup.js";
 
 export class TrackerInterface {
@@ -51,7 +52,13 @@ export class TrackerInterface {
             <div id="trackerEnhancedInterfaceheader" class="fa-solid fa-grip drag-grabber hoverglow"></div>
             <div id="trackerInterfaceClose" class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
         </div>`;
-        const editorHeader = `<div id="trackerInterfaceHeader">Tracker Enhanced</div>`;
+        const editorHeader = `<div id="trackerInterfaceHeaderBar" class="flex-container alignItemsCenter">
+            <div id="trackerInterfaceHeader">Tracker Enhanced</div>
+            <div id="trackerInterfaceEnableToggle" class="tracker-enable-toggle interactable" tabindex="0" title="Enable/disable Tracker Enhanced globally">
+                <i class="fa-solid fa-toggle-on"></i>
+                <span class="tracker-enable-label">Enabled</span>
+            </div>
+        </div>`;
         const editorContainer = `<div id="trackerInterfaceContents" class="scrollY"></div>`;
         const editorFooter = `<div id="trackerInterfaceFooter">
             <button id="trackerInterfaceViewButton" class="menu_button menu_button_default interactable" tabindex="0">View</button>
@@ -85,6 +92,7 @@ export class TrackerInterface {
         // Store references
         this.container = newElement;
         this.editorHeader = newElement.find('#trackerInterfaceHeader');
+        this.enableToggle = newElement.find('#trackerInterfaceEnableToggle');
         this.contentArea = newElement.find('#trackerInterfaceContents');
         this.viewButton = newElement.find('#trackerInterfaceViewButton');
         this.editButton = newElement.find('#trackerInterfaceEditButton');
@@ -97,6 +105,26 @@ export class TrackerInterface {
         this.editButton.on('click', () => this.switchMode('edit'));
         this.regenerateButton.on('click', () => this.regenerateTracker());
         this.deleteButton.on('click', () => this.removeTracker());
+
+        // Global enable/disable toggle (mirrors the settings checkbox)
+        this.enableToggle.on('click', async () => {
+            await toggleExtension(!extensionSettings.enabled);
+            this.updateEnableToggle();
+        });
+        this.updateEnableToggle();
+    }
+
+    /**
+     * Syncs the global enable/disable toggle in the header with the current setting.
+     */
+    updateEnableToggle() {
+        if (!this.enableToggle) return;
+        const enabled = Boolean(extensionSettings.enabled);
+        this.enableToggle.toggleClass('toggleEnabled', enabled);
+        this.enableToggle.find('i')
+            .toggleClass('fa-toggle-on', enabled)
+            .toggleClass('fa-toggle-off', !enabled);
+        this.enableToggle.find('.tracker-enable-label').text(enabled ? 'Enabled' : 'Disabled');
     }
 
     /**
