@@ -16,7 +16,6 @@ export class TrackerInterface {
         }
         TrackerInterface.instance = this;
 
-        this.schema = extensionSettings.trackerDef;
         this.renderer = new TrackerContentRenderer();
         this.container = null;
         this.tracker = null;
@@ -49,7 +48,7 @@ export class TrackerInterface {
         // Use the zoomed_avatar_template
         const template = $("#zoomed_avatar_template").html();
         const controlBarHtml = `<div class="panelControlBar flex-container">
-            <div id="trackerInterfaceheader" class="fa-solid fa-grip drag-grabber hoverglow"></div>
+            <div id="trackerEnhancedInterfaceheader" class="fa-solid fa-grip drag-grabber hoverglow"></div>
             <div id="trackerInterfaceClose" class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
         </div>`;
         const editorHeader = `<div id="trackerInterfaceHeader">Tracker Enhanced</div>`;

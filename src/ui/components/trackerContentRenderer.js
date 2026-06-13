@@ -1,5 +1,4 @@
 import { extensionSettings } from "../../../index.js";
-import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS } from "../../trackerDataHandler.js";
 import { TrackerPromptMaker } from "./trackerPromptMaker.js";
 
 export class TrackerContentRenderer {
@@ -608,7 +607,7 @@ export class TrackerContentRenderer {
 	 */
 	tokenizeTemplate(template) {
 		const tokens = [];
-		const regex = /{{\s*(\/?)\s*(#?)\s*([\w.]+|\^)\s*(.*?)\s*}}/g;
+		const regex = /{{\s*(\/?)\s*(#?)\s*([\w.]+)\s*(.*?)\s*}}/g;
 		let cursor = 0;
 		let match;
 
@@ -689,6 +688,8 @@ export class TrackerContentRenderer {
 					} else {
 						value = context._key; // Fallback to the parent key
 					}
+					// These bypass getValue's sanitization and come straight from model output.
+					value = this.escapeHtml(value);
 				}
 				result += value !== undefined ? value : "";
 			} else if (token.type === "start") {
@@ -714,7 +715,9 @@ export class TrackerContentRenderer {
 					if (collection && typeof collection === "object") {
 						const [innerTokens, remainingTokens] = this.extractInnerTokens(tokens, "foreach");
 
-						const items = Array.isArray(collection) ? collection : Object.entries(collection);
+						// Normalize plain arrays to [key, value] pairs like Object.entries — destructuring
+						// a bare array of strings used to split each string into its first two characters.
+						const items = Array.isArray(collection) ? collection.map((value, i) => [i, value]) : Object.entries(collection);
 
 						items.forEach(([key, item], index) => {
 							const newContext = {
@@ -741,9 +744,9 @@ export class TrackerContentRenderer {
 						const array = this.getValue(arrayName, data, context);
 
 						if (Array.isArray(array)) {
-							result += array.join(separator);
+							result += array.map((v) => this.escapeHtml(v)).join(separator);
 						} else if (array && typeof array === "object" && !Array.isArray(array)) {
-							result += Object.values(array).join(separator);
+							result += Object.values(array).map((v) => this.escapeHtml(v)).join(separator);
 						}
 					}
 					// 'join' does not require an end tag.
@@ -812,10 +815,21 @@ export class TrackerContentRenderer {
 				value = this.applyStringOperations(value, operations);
 			}
 			// Sanitize for HTML
-			value = value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+			value = this.escapeHtml(value);
 		}
 
 		return value;
+	}
+
+	/**
+	 * Escapes HTML angle brackets in string values (tracker data is model output).
+	 * Non-string values pass through unchanged.
+	 * @param {*} value - The value to escape.
+	 * @returns {*} - The escaped value.
+	 */
+	escapeHtml(value) {
+		if (typeof value !== "string") return value;
+		return value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 	}
 
 	/**
@@ -854,7 +868,9 @@ export class TrackerContentRenderer {
 	 * @returns {boolean} - The result of the condition evaluation.
 	 */
 	evaluateCondition(condition, data, context) {
-		const operators = ["==", "!=", ">", "<", ">=", "<="];
+		// Two-character operators must be checked first: ">" would otherwise match inside ">=",
+		// splitting "a >= b" into "a" and "= b" and making >=/<= unusable.
+		const operators = ["==", "!=", ">=", "<=", ">", "<"];
 		let operatorFound = null;
 
 		for (const op of operators) {

@@ -1,4 +1,3 @@
-import { chat } from "../../../../../../script.js";
 import { emitTrackerPreviewAdded, emitTrackerPreviewUpdated } from "../../lib/interconnection.js";
 import { debug, error } from "../../lib/utils.js";
 import { TrackerContentRenderer } from "./components/trackerContentRenderer.js";
@@ -287,30 +286,6 @@ export class TrackerPreviewManager {
     }
 
     /**
-     * Handles a new message being added.
-     * @param {string} messageId - The message ID.
-     */
-    static handleNewMessage(messageId) {
-        this.addPreview(messageId);
-    }
-
-    /**
-     * Handles a message being moved (messageId changed).
-     * @param {string} oldMessageId - The old message ID.
-     * @param {string} newMessageId - The new message ID.
-     */
-    static handleMovedMessage(oldMessageId, newMessageId) {
-        const preview = this.previews.get(oldMessageId);
-        if (preview) {
-            // Update the preview with the new messageId
-            preview.updateMessageId(newMessageId);
-            // Update the registry
-            this.previews.delete(oldMessageId);
-            this.previews.set(newMessageId, preview);
-        }
-    }
-
-    /**
      * Generates a unique ID for a tracker preview.
      * The ID is composed of the current timestamp and a random string.
      * @returns {string} A unique ID string.
@@ -319,34 +294,4 @@ export class TrackerPreviewManager {
         return `preview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    /**
-     * Refreshes all previews (e.g., when the template changes).
-     */
-    static refreshAll() {
-        this.previews.forEach((preview) => {
-            preview.update();
-        });
-    }
-
-    /**
-     * Clears all previews and re-initializes them.
-     */
-    static reinitializeAll() {
-        this.previews.forEach((preview) => {
-            preview.delete();
-        });
-        this.previews.clear();
-        this.scanAndRender();
-    }
-
-    /**
-     * Disconnects the MutationObserver and cleans up.
-     */
-    static disconnect() {
-        if (this.observer) {
-            this.observer.disconnect();
-            this.observer = null;
-        }
-        this.reinitializeAll();
-    }
 }

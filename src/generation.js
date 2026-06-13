@@ -1,5 +1,5 @@
 import { generateRaw, chat, characters, this_chid, getCharacterCardFields, name1 } from "../../../../../script.js";
-import { getContext } from '../../../../../../scripts/extensions.js';
+import { getContext } from '../../../../../scripts/extensions.js';
 
 import { groups, selected_group } from "../../../../../scripts/group-chats.js";
 import { log, warn, debug, error, unescapeJsonString, getLastMessageWithTracker } from "../lib/utils.js";
@@ -214,7 +214,7 @@ async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
  * @returns {object|null} The new tracker object or null if failed.
  */
 export async function generateTracker(mesNum, includedFields = FIELD_INCLUDE_OPTIONS.DYNAMIC) {
-	if (mesNum == null || mesNum < 0 || chat[mesNum].extra?.isSmallSys) return null;
+	if (mesNum == null || mesNum < 0 || !chat[mesNum] || chat[mesNum].extra?.isSmallSys) return null;
 
 	log(`[Tracker Enhanced] 🚀 Starting tracker generation for message ${mesNum} using INDEPENDENT connection`);
 	debug(`[Tracker Enhanced] Selected profile: ${extensionSettings.selectedProfile}, Selected preset: ${extensionSettings.selectedCompletionPreset}`);
@@ -235,7 +235,9 @@ export async function generateTracker(mesNum, includedFields = FIELD_INCLUDE_OPT
 		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesNum);
 		const lastMesWithTracker = chat[lastMesWithTrackerIndex];
 		let lastTracker = lastMesWithTracker ? lastMesWithTracker.tracker : getDefaultTracker(extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, OUTPUT_FORMATS.JSON);
-		const result = updateTracker(lastTracker, tracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, OUTPUT_FORMATS.JSON, true);
+		// 4th param is includeUnmatchedFields (boolean) — this used to pass FIELD_INCLUDE_OPTIONS.ALL,
+		// which only worked because the string "all" is truthy.
+		const result = updateTracker(lastTracker, tracker, extensionSettings.trackerDef, true, OUTPUT_FORMATS.JSON, true);
 		
 		log(`[Tracker Enhanced] ✅ Tracker generation completed successfully using independent connection`);
 		return result;
@@ -312,9 +314,10 @@ async function sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseL
 		try {
 			if(extensionSettings.trackerFormat == trackerFormat.JSON) tracker = unescapeJsonString(tracker);
 			const trackerContent = tracker.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
-			let result = trackerContent ? trackerContent[1].trim() : null;
-			if(extensionSettings.trackerFormat == trackerFormat.YAML) result = yamlToJSON(result);
-			newTracker = JSON.parse(result);
+			const result = trackerContent ? trackerContent[1].trim() : null;
+			// yamlToJSON returns the parsed object (and throws on non-string/garbage input,
+			// which the catch below turns into the parse-failure toast).
+			newTracker = extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(result) : JSON.parse(result);
 			log(`[Tracker Enhanced] ✅ Successfully parsed tracker response from independent connection`);
 		} catch (e) {
 			error(`[Tracker Enhanced] ❌ Failed to parse tracker from independent connection:`, tracker, e);
@@ -337,9 +340,8 @@ async function sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseL
 		try {
 			if(extensionSettings.trackerFormat == trackerFormat.JSON) tracker = unescapeJsonString(tracker);
 			const trackerContent = tracker.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
-			let result = trackerContent ? trackerContent[1].trim() : null;
-			if(extensionSettings.trackerFormat == trackerFormat.YAML) result = yamlToJSON(result);
-			newTracker = JSON.parse(result);
+			const result = trackerContent ? trackerContent[1].trim() : null;
+			newTracker = extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(result) : JSON.parse(result);
 			log(`[Tracker Enhanced] ✅ Successfully parsed tracker response from fallback method`);
 		} catch (e) {
 			error(`[Tracker Enhanced] ❌ Failed to parse tracker from fallback method:`, tracker, e);
@@ -643,10 +645,22 @@ export function getRequestPrompt(template, mesNum = null, includedFields, firstS
 	}
 
 	const trackerFieldPromptVal = getTrackerPrompt(extensionSettings.trackerDef, includedFields);
+
+	// {{defaultTracker}} is offered alongside the other macros (the default inline request prompt
+	// uses it); without it the literal macro text was sent to the model.
+	let defaultTrackerVal = getDefaultTracker(extensionSettings.trackerDef, includedFields, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
+	if (extensionSettings.trackerFormat == trackerFormat.JSON) {
+		defaultTrackerVal = JSON.stringify(defaultTrackerVal, null, 2);
+	}
+
 	const vars = {
 		message: messageText,
 		trackerFieldPrompt: trackerFieldPromptVal,
 		trackerFormat: extensionSettings.trackerFormat,
+		defaultTracker: defaultTrackerVal,
+		// Default to "" so a custom single-stage prompt containing {{firstStageMessage}} doesn't
+		// leak the unresolved macro into the request.
+		firstStageMessage: "",
 	};
 
 	// If two-stage mode and firstStage is provided and the template includes {{firstStageMessage}}, add it

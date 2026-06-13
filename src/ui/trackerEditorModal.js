@@ -1,4 +1,3 @@
-import { extensionSettings } from "../../index.js";
 import { TrackerContentRenderer } from "./components/trackerContentRenderer.js";
 
 export class TrackerEditorModal {
@@ -7,14 +6,12 @@ export class TrackerEditorModal {
 			return TrackerEditorModal.instance;
 		}
 		TrackerEditorModal.instance = this;
-		this.schema = extensionSettings.trackerDef;
 		this.mesId = mesId;
 		this.modal = null;
 		this.tracker = null;
 		this.originalTracker = null;
 		this.resolvePromise = null;
-		this.rejectPromise = null;
-		this.renderer = new TrackerContentRenderer(extensionSettings.trackerDef);
+		this.renderer = new TrackerContentRenderer();
 	}
 
 	/**
@@ -24,11 +21,10 @@ export class TrackerEditorModal {
 	 * @returns {Promise<object>} - A promise resolving with the tracker object.
 	 */
 	show(tracker) {
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve) => {
 			this.tracker = JSON.parse(JSON.stringify(tracker)); // Clone the tracker
 			this.originalTracker = tracker;
 			this.resolvePromise = resolve;
-			this.rejectPromise = reject;
 
 			if (!this.modal) {
 				this.createModal();

@@ -4,6 +4,7 @@
 - `index.js` wires SillyTavern events, generation mutex listeners, and slash commands into the extension entry point.
 - Core logic under `src/`: `tracker.js` orchestrates generation/injection, `generation.js` handles independent connection requests, `trackerDataHandler.js` manages schema reconciliation, and `ui/` + `settings/` hold modals, previews, and defaults.
 - Shared helpers live in `lib/` (`utils.js`, `interconnection.js`, `ymlParser.js`); reuse them before adding new utilities.
+- `lib/ymlParser.js` is a thin wrapper over SillyTavern's bundled `yaml` package (`import { yaml } from "../../../../../lib.js"`); the old hand-rolled parser corrupted commas/`#`/quotes/types. Despite the legacy name, `yamlToJSON()` returns the parsed OBJECT (and throws on garbage); `jsonToYAML()` emits standard block-style YAML, so newly serialized trackers look different from old inline-array YAML but both parse fine.
 - UI assets remain in `html/settings.html`, `sass/style.scss`, and compiled `style.css`. Treat `docs/Tracker Documentation.pdf` as legacy; rely on `README.md` for current behaviour.
 
 ## Build, Test & Development Commands
@@ -18,7 +19,7 @@
 - Use provided `debug/log/warn/error` helpers for console output so debug mode can silence them globally.
 
 ## Tracker Behaviour Notes (2025-09)
-- Tracker auto-generation hooks fire from `onGenerateAfterCommands`, `onMessageSent/Received`, and render callbacks. SillyTavern emits a `generation_after_commands` dry-run immediately after `chat_id_changed`; we now bail early and log `GENERATION_AFTER_COMMANDS dry run skip { type: "normal", dryRun: true, ... }` to confirm no request is sent.
+- Tracker auto-generation hooks fire from `onGenerateAfterCommands` and the message-rendered callbacks (`onUserMessageRendered`/`onCharacterMessageRendered`). The old `onMessageSent/Received` handlers were retired when generation moved to post-response (commit 5b4629c) and have been deleted. SillyTavern emits a `generation_after_commands` dry-run immediately after `chat_id_changed`; we now bail early and log `GENERATION_AFTER_COMMANDS dry run skip { type: "normal", dryRun: true, ... }` to confirm no request is sent.
 - The first real turn after a reload still fires a second `generation_after_commands` with `dryRun: false`. Look for the log payload `(3) [undefined, options, false]` before tracker generation starts. If that never appears, reload the extension to clear stale `chat_metadata`.
 - `addTrackerToMessage` writes tracker data before the DOM exists; previews/interface updates must run in `onUserMessageRendered`/`onCharacterMessageRendered`. Skipping those handlers after a tracker exists hides UI updates.
 - When investigating tracker gaps, capture the full console sequence (chat open → user turn → character reply). Two sequential generation calls are expected in single-stage mode: one for the previous message, one for the newly rendered message. Only unexpected dry-run omissions should be treated as regressions.

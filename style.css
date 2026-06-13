@@ -343,40 +343,20 @@
   cursor: pointer;
 }
 
-.tracker-object-editor .field-wrapper,
-.tracker-object-editor .object-wrapper,
-.tracker-object-editor .array-wrapper {
-  border: 1px solid #ccc;
-  padding: 10px;
-  margin-bottom: 10px;
-}
-
 .tracker-prompt-maker input,
-.tracker-prompt-maker select,
-.tracker-object-editor input {
+.tracker-prompt-maker select {
   margin-bottom: 5px;
 }
 
 .tracker-prompt-maker input:not([type=checkbox]):not([type=radio]),
-.tracker-prompt-maker select,
-.tracker-object-editor input:not([type=checkbox]):not([type=radio]) {
+.tracker-prompt-maker select {
   display: block;
   width: 100%;
 }
 
-.tracker-prompt-maker .nested-fields-container,
-.tracker-object-editor .nested-container {
+.tracker-prompt-maker .nested-fields-container {
   margin-left: 20px;
   margin-top: 10px;
-}
-
-.tracker-object-editor button {
-  margin-right: 5px;
-}
-
-.tracker-object-editor {
-  max-height: 80vh;
-  overflow-y: scroll;
 }
 
 .tracker-modal-content .tracker-editor-container {
@@ -425,13 +405,4 @@ label[for=tracker_enhanced_reset_presets] {
 #tracker_enhanced_completion_preset option[value*=❌] {
   color: #f44336;
   font-weight: 500;
-}
-
-.tracker-compatibility-help {
-  font-size: 0.85em;
-  margin-top: 5px;
-  padding: 8px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  border-left: 3px solid #2196F3;
 }

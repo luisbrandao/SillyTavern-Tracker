@@ -5,15 +5,29 @@ import { removeTrackerFromMessage } from "./tracker.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS } from "./trackerDataHandler.js";
 import { TrackerPreviewManager } from "./ui/trackerPreviewManager.js";
 import { extensionSettings } from "../index.js";
-import { isEnabled, toggleExtension } from "./settings/settings.js";
+import { toggleExtension } from "./settings/settings.js";
+
+/**
+ * Resolves the `message=` argument to a chat index, defaulting to the last non-system message.
+ * Treats 0 as a valid index (a plain falsy check would silently retarget message 0).
+ * @param {string|number|undefined} messageArg - The raw `message=` argument.
+ * @returns {number} The message index, or -1 if none is valid.
+ */
+function resolveMessageArg(messageArg) {
+    if (messageArg === undefined || messageArg === null || messageArg === "") {
+        return getLastNonSystemMessageIndex();
+    }
+    const mesId = Number(messageArg);
+    if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) {
+        return -1;
+    }
+    return mesId;
+}
 
 export async function generateTrackerCommand(args, value){
-    let mesId = args?.message;
-    if (!mesId) {
-        mesId = getLastNonSystemMessageIndex();
-    }
+    const mesId = resolveMessageArg(args?.message);
 
-    if (!mesId) {
+    if (mesId === -1) {
         throw new Error(`No valid message found to generate a tracker.`);
     }
 
@@ -54,10 +68,10 @@ export async function trackerOverrideCommand(args, value){
 }
 
 export async function saveTrackerToMessageCommand(args, value){
-    const mesId = args?.message ?? getLastNonSystemMessageIndex();
+    const mesId = resolveMessageArg(args?.message);
     const trackerString = args?.tracker;
 
-    if (!mesId || !trackerString) {
+    if (mesId === -1 || !trackerString) {
         throw new Error(`Invalid message or tracker provided.`);
     }
 
@@ -75,13 +89,9 @@ export async function saveTrackerToMessageCommand(args, value){
 }
 
 export async function removeTrackerFromMessageCommand(args, value){
-    let mesId = args?.message;
-    if (mesId === undefined || mesId === null || mesId === "") {
-        mesId = getLastNonSystemMessageIndex();
-    }
-    mesId = Number(mesId);
+    const mesId = resolveMessageArg(args?.message);
 
-    if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) {
+    if (mesId === -1) {
         throw new Error(`No valid message found to remove a tracker from.`);
     }
 
@@ -90,9 +100,9 @@ export async function removeTrackerFromMessageCommand(args, value){
 }
 
 export async function getTrackerCommand(args, value){
-    const mesId = args?.message ?? getLastNonSystemMessageIndex();
+    const mesId = resolveMessageArg(args?.message);
 
-    if (!mesId) {
+    if (mesId === -1) {
         throw new Error(`No valid message found to generate a tracker.`);
     }
 
@@ -110,12 +120,13 @@ export async function getTrackerCommand(args, value){
 export async function stateTrackerCommand(args, value){
     const enabledString = args?.enabled;
 
-    var enabled = isEnabled();
-
     if (enabledString) {
-        var enabled = enabledString.toLowerCase() === 'true';
+        const enabled = enabledString.toLowerCase() === 'true';
         await toggleExtension(enabled);
+        return enabled ? "true" : "false";
     }
 
-    return enabled ? "true" : "false";
+    // Read the setting directly: isEnabled() is async (a bare call is always truthy) and also
+    // captures the generation mutex as a side effect — neither is wanted for a state query.
+    return extensionSettings.enabled ? "true" : "false";
 }

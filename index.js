@@ -6,12 +6,6 @@ import { ARGUMENT_TYPE, SlashCommandNamedArgument } from "../../../slash-command
 import { commonEnumProviders } from "../../../slash-commands/SlashCommandCommonEnumsProvider.js";
 import { SlashCommandEnumValue  } from "../../../slash-commands/SlashCommandEnumValue.js";
 
-import { textgenerationwebui_settings as textgen_settings, textgen_types } from "../../../../scripts/textgen-settings.js";
-import { oai_settings } from "../../../../scripts/openai.js";
-import { nai_settings } from "../../../../scripts/nai-settings.js";
-import { horde_settings } from "../../../../scripts/horde.js";
-import { kai_settings } from "../../../../scripts/kai-settings.js";
-
 import { initSettings } from "./src/settings/settings.js";
 import { eventHandlers } from "./src/events.js";
 
@@ -42,7 +36,6 @@ eventSource.on(event_types.CHAT_CHANGED, eventHandlers.onChatChanged);
 eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, eventHandlers.onCharacterMessageRendered);
 eventSource.on(event_types.USER_MESSAGE_RENDERED, eventHandlers.onUserMessageRendered);
 eventSource.on(event_types.GENERATION_AFTER_COMMANDS, eventHandlers.onGenerateAfterCommands);
-eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, eventHandlers.generateAfterCombinePrompts);
 
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({

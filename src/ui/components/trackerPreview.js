@@ -38,14 +38,6 @@ export class TrackerPreview {
     }
 
     /**
-     * Handles tracker replacement by reinitializing the instance.
-     */
-    handleTrackerReplacement() {
-        this.tracker = this.getTracker();
-        this.update();
-    }
-
-    /**
      * Renders the tracker preview.
      */
     render() {
