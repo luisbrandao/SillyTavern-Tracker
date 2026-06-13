@@ -73,9 +73,8 @@
 			<!-- Tracker Injection Role -->
 			<div class="tracker-block m-b-1 m-t-1">
 				<label for="tracker_enhanced_injection_role">Tracker Injection Role</label><br />
-				<small>Role of the injected tracker message. Note: APIs that enforce user/assistant turn alternation (Claude, Gemini, Mistral, ...) merge adjacent same-role messages, and mid-chat System messages are converted to User — so System and User both end up glued into the player's turn there. Assistant attaches the tracker to the end of the character's last message instead, keeping the player's turn clean; on OpenAI-compatible APIs it stays a fully separate message.</small><br />
+				<small>Role of the injected tracker message. User glues the tracker into the player's turn. Assistant attaches it to the end of the character's last message instead, keeping the player's turn clean; on OpenAI-compatible APIs it stays a fully separate message.</small><br />
 				<select id="tracker_enhanced_injection_role" class="text_pole">
-					<option value="system">System</option>
 					<option value="user">User</option>
 					<option value="assistant">Assistant</option>
 				</select>

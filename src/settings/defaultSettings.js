@@ -943,7 +943,7 @@ export const defaultSettings = {
 	generationTarget: generationTargets.BOTH,
 	showPopupFor: generationTargets.NONE,
 	trackerFormat: trackerFormat.YAML,
-	trackerInjectionRole: trackerInjectionRoles.SYSTEM,
+	trackerInjectionRole: trackerInjectionRoles.USER,
 
 	generationMode: generationModes.SINGLE_STAGE,
 
