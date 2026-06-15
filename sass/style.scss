@@ -13,6 +13,30 @@
 		padding-right: 25px;
 	}
 
+	#trackerInterfaceNav {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		i {
+			cursor: pointer;
+			font-size: 1.1em;
+			opacity: 0.8;
+			transition: opacity 0.2s ease, color 0.2s ease;
+
+			&:hover {
+				opacity: 1;
+				color: var(--SmartThemeQuoteColor);
+			}
+
+			&.disabled {
+				opacity: 0.25;
+				cursor: default;
+				pointer-events: none;
+			}
+		}
+	}
+
 	#trackerInterfaceHeader {
 		font-size: 17.55px;
 		font-weight: 700;

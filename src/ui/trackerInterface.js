@@ -2,7 +2,7 @@ import { animation_duration, chat } from "../../../../../../script.js";
 import { dragElement } from "../../../../../../scripts/RossAscends-mods.js";
 import { loadMovingUIState } from "../../../../../../scripts/power-user.js";
 import { extensionSettings } from "../../index.js";
-import { error, getPreviousNonSystemMessageIndex, getLastNonSystemMessageIndex, debug } from "../../lib/utils.js";
+import { error, getPreviousNonSystemMessageIndex, getNextNonSystemMessageIndex, getLastNonSystemMessageIndex, debug } from "../../lib/utils.js";
 import { generateTracker } from "../generation.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS, saveTracker } from "../trackerDataHandler.js";
 import { TrackerContentRenderer } from './components/trackerContentRenderer.js';
@@ -53,6 +53,10 @@ export class TrackerInterface {
             <div id="trackerInterfaceClose" class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
         </div>`;
         const editorHeader = `<div id="trackerInterfaceHeaderBar" class="flex-container alignItemsCenter">
+            <div id="trackerInterfaceNav" class="tracker-nav">
+                <i id="trackerInterfacePrev" class="fa-solid fa-chevron-left interactable" tabindex="0" title="Previous message"></i>
+                <i id="trackerInterfaceNext" class="fa-solid fa-chevron-right interactable" tabindex="0" title="Next message"></i>
+            </div>
             <div id="trackerInterfaceHeader">Tracker Enhanced</div>
             <div id="trackerInterfaceEnableToggle" class="tracker-enable-toggle interactable" tabindex="0" title="Enable/disable Tracker Enhanced globally">
                 <i class="fa-solid fa-toggle-on"></i>
@@ -93,6 +97,8 @@ export class TrackerInterface {
         this.container = newElement;
         this.editorHeader = newElement.find('#trackerInterfaceHeader');
         this.enableToggle = newElement.find('#trackerInterfaceEnableToggle');
+        this.prevButton = newElement.find('#trackerInterfacePrev');
+        this.nextButton = newElement.find('#trackerInterfaceNext');
         this.contentArea = newElement.find('#trackerInterfaceContents');
         this.viewButton = newElement.find('#trackerInterfaceViewButton');
         this.editButton = newElement.find('#trackerInterfaceEditButton');
@@ -105,6 +111,10 @@ export class TrackerInterface {
         this.editButton.on('click', () => this.switchMode('edit'));
         this.regenerateButton.on('click', () => this.regenerateTracker());
         this.deleteButton.on('click', () => this.removeTracker());
+
+        // Previous/next message navigation
+        this.prevButton.on('click', () => this.navigate(-1));
+        this.nextButton.on('click', () => this.navigate(1));
 
         // Global enable/disable toggle (mirrors the settings checkbox)
         this.enableToggle.on('click', async () => {
@@ -128,11 +138,60 @@ export class TrackerInterface {
     }
 
     /**
+     * Loads the tracker for a given message into the interface, rebuilding the
+     * tracker data and save handler for that message. Refreshes the view if the
+     * interface is already open.
+     * @param {number} mesId - The chat message index to load.
+     * @returns {boolean} True if the message was loaded, false if the id was invalid.
+     */
+    loadMessage(mesId) {
+        if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) return false;
+
+        const mesTracker = chat[mesId]?.tracker || {};
+        this.tracker = getTracker(mesTracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON);
+        this.mesId = mesId;
+        this.onSave = async (updatedTracker) => {
+            debug("Saving Tracker", {updatedTracker, mesId});
+            return await saveTracker(updatedTracker, extensionSettings.trackerDef, mesId, true);
+        };
+
+        if (this.container) {
+            this.refreshContent(this.mode);
+        }
+        return true;
+    }
+
+    /**
+     * Navigates the interface to the previous/next non-system message.
+     * @param {number} direction - Negative to go to the previous message, positive for the next.
+     */
+    navigate(direction) {
+        if (!Number.isInteger(this.mesId)) return;
+        const targetMesId = direction < 0
+            ? getPreviousNonSystemMessageIndex(this.mesId)
+            : getNextNonSystemMessageIndex(this.mesId);
+        if (targetMesId === -1) return;
+        this.loadMessage(targetMesId);
+    }
+
+    /**
+     * Enables/disables the navigation arrows based on whether an adjacent message exists.
+     */
+    updateNavButtons() {
+        if (!this.prevButton) return;
+        const hasPrev = Number.isInteger(this.mesId) && getPreviousNonSystemMessageIndex(this.mesId) !== -1;
+        const hasNext = Number.isInteger(this.mesId) && getNextNonSystemMessageIndex(this.mesId) !== -1;
+        this.prevButton.toggleClass('disabled', !hasPrev);
+        this.nextButton.toggleClass('disabled', !hasNext);
+    }
+
+    /**
      * Updates the content area based on the current mode.
      */
     refreshContent(mode = 'view') {
         this.contentArea.empty();
         this.editorHeader.text('Tracker' + (this.mesId ? ` - Message ${this.mesId}` : ''));
+        this.updateNavButtons();
 
         if (mode === 'view') {
             const contentElement = this.renderer.renderDefaultView(this.tracker);
@@ -305,22 +364,12 @@ export class TrackerInterface {
             let mesId = Number.isInteger(requestedMesId) && requestedMesId >= 0 ? requestedMesId : getLastNonSystemMessageIndex();
 
             if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) {
-                mesId = getLastNonSystemMessageIndex();
-            }
-
-            if (!Number.isInteger(mesId) || mesId < 0 || !chat[mesId]) {
                 toastr.info('No chat messages are available yet for tracker editing. Send a message first.');
                 return;
             }
 
-            const mesTracker = chat[mesId]?.tracker || {};
-            const trackerData = getTracker(mesTracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON);
-            const onSave = async (updatedTracker) => {
-                debug("Saving Tracker", {updatedTracker, mesId});
-                return await saveTracker(updatedTracker, extensionSettings.trackerDef, mesId, true);
-            };
             const trackerInterface = new TrackerInterface();
-            trackerInterface.init(trackerData, mesId, onSave);
+            trackerInterface.loadMessage(mesId);
             trackerInterface.show();
         };
 
