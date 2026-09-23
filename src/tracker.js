@@ -1,11 +1,10 @@
-import { saveChatConditional, chat, chat_metadata, setExtensionPrompt, extension_prompt_roles, deactivateSendButtons, activateSendButtons, getBiasStrings, system_message_types, sendSystemMessage, sendMessageAsUser, removeMacros, extractMessageBias, messageFormatting } from "../../../../../script.js";
+import { saveChatConditional, chat, chat_metadata, setExtensionPrompt, extension_prompt_roles, deactivateSendButtons, activateSendButtons, getBiasStrings, system_message_types, sendSystemMessage, sendMessageAsUser, removeMacros, messageFormatting } from "../../../../../script.js";
 
 import { hasPendingFileAttachment } from "../../../../../scripts/chats.js";
-import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js";
-import { debug, error, log, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
+import { debug, error, log, getLastMessageWithTracker, getLastNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
-import { generateTracker, getRequestPrompt } from "./generation.js";
-import { generationModes, generationTargets, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
+import { generateTracker } from "./generation.js";
+import { generationTargets, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
 import { jsonToYAML } from "../lib/ymlParser.js";
 import { FIELD_INCLUDE_OPTIONS, getDefaultTracker, OUTPUT_FORMATS, getTracker as getCleanTracker, trackerExists, cleanTracker } from "./trackerDataHandler.js";
 import { TrackerEditorModal } from "./ui/trackerEditorModal.js";
@@ -123,18 +122,6 @@ async function ensureFreshTracker(mesId) {
 }
 
 /**
- * Injects the inline prompt into the extension prompt system.
- * @param {boolean} clearTracker - If true, clears the inline prompt.
- */
-async function injectInlinePrompt(clearTracker = false) {
-	// FIELD_INCLUDE_OPTIONS.DYNAMIC matches the field set used by staged generation; the old `false`
-	// argument matched no include option, so {{trackerFieldPrompt}} always expanded to an empty string.
-	const inlinePrompt = clearTracker ? "" : getRequestPrompt(extensionSettings.inlineRequestPrompt, null, FIELD_INCLUDE_OPTIONS.DYNAMIC);
-	if(!clearTracker) debug("Injecting inline prompt:", inlinePrompt);
-	await setExtensionPrompt("inlineTrackerEnhancedPrompt", inlinePrompt, 1, 0, true, EXTENSION_PROMPT_ROLES.SYSTEM);
-}
-
-/**
  * Resolves the configured "Tracker Injection Role" setting to a core extension prompt role.
  * System injects a nameless narrator block that some backends/instruct formats merge into the
  * adjacent turn; User/Assistant make the tracker its own named message in the chat history.
@@ -194,93 +181,7 @@ async function injectTracker(tracker = "", position = 0) {
  */
 export async function clearInjects() {
 	debug("Clearing injects");
-	await injectInlinePrompt(true);
 	await injectTracker("", 0);
-}
-
-/**
- * Adds inline trackers to the specified messages.
- * @param {number} lastMesId - The last message ID to consider.
- * @param {boolean} noSave - If true, skips saving the chat.
- */
-async function addInlineTrackers(lastMesId, noSave = false) {
-	const numberOfMessages = extensionSettings.numberOfMessages === 0 ? chat.length : extensionSettings.numberOfMessages;
-	const messages = chat
-		.slice(0, lastMesId + 1)
-		.map((mes, index) => ({ index, mes }))
-		.filter(({ index, mes }) => !isSystemMessage(index) && mes.tracker)
-		.slice(-numberOfMessages)
-		.map(({ index }) => index);
-
-	for (const mesId of messages) {
-		const mes = chat[mesId];
-		const trackerText = serializeTracker(mes.tracker);
-		mes.mes = `<tracker>${trackerText}</tracker>\n\n${mes.mes.trim()}`;
-		mes.has_inline_tracker = true;
-	}
-
-	if (!noSave) await saveChatConditional();
-}
-
-/**
- * Removes inline trackers from messages.
- * @param {boolean} noSave - If true, skips saving the chat.
- */
-async function removeInlineTrackers(noSave = false) {
-	const messages = chat
-		.slice()
-		.map((mes, index) => ({ index, mes }))
-		.filter(({ mes }) => mes.has_inline_tracker)
-		.map(({ index }) => index);
-
-	for (const mesId of messages) {
-		await extractAndSaveInlineTracker(mesId, true);
-		delete chat[mesId].has_inline_tracker;
-	}
-
-	if (!noSave) await saveChatConditional();
-}
-
-/**
- * Extracts the inline tracker from a message and saves it.
- * @param {number} mesId - The message ID.
- * @param {boolean} noSave - If true, skips saving the chat.
- */
-async function extractAndSaveInlineTracker(mesId, noSave = false) {
-	const mes = chat[mesId];
-
-	// Regex to extract the tracker content
-	const trackerRegex = /<tracker>([\s\S]*?)<\/tracker>/;
-	const trackerMatch = mes.mes.match(trackerRegex);
-
-	if (trackerMatch && !mes.tracker) {
-		const trackerYAML = trackerMatch[1];
-		const tracker = getCleanTracker(trackerYAML, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON);
-
-		// Save the tracker JSON back to the message object
-		if (tracker) {
-			mes.tracker = tracker;
-			mes.mes = mes.mes.replace(trackerRegex, "").trim();
-		} else {
-			warn(`Failed to parse tracker YAML for message ID ${mesId}`);
-			noSave = true;
-		}
-	}
-
-	if (!noSave) await saveChatConditional();
-
-	TrackerPreviewManager.updatePreview(mesId);
-}
-
-/**
- * Refreshes inline trackers.
- * @param {number} lastMesId - The last message ID to consider.
- * @param {boolean} noSave - If true, skips saving the chat.
- */
-async function refreshInlineTrackers(lastMesId, noSave = false) {
-	await removeInlineTrackers(true);
-	await addInlineTrackers(lastMesId, true);
-	if (!noSave) await saveChatConditional();
 }
 
 //#endregion
@@ -296,72 +197,7 @@ async function refreshInlineTrackers(lastMesId, noSave = false) {
 export async function prepareMessageGeneration(type, options, dryRun) {
 	if (!chat_metadata.tracker) chat_metadata.tracker = {};
 
-	if (extensionSettings.generationMode === generationModes.INLINE) {
-		await handleInlineGeneration(type);
-	} else {
-		await handleStagedGeneration(type, options, dryRun);
-	}
-}
-
-/**
- * Handles inline message generation.
- * @param {string} type - The type of message generation.
- */
-async function handleInlineGeneration(type) {
-	const mesId = getLastNonSystemMessageIndex();
-	// Note: CONTINUE deliberately falls through to the trailing else (refresh up to mesId + inline
-	// prompt). An older version also refreshed up to mesId-1 first, which the else immediately superseded.
-	if ([ACTION_TYPES.SWIPE, ACTION_TYPES.REGENERATE].includes(type)) {
-		await refreshInlineTrackers(mesId - 1, true);
-		const mes = chat[mesId];
-		if (type === ACTION_TYPES.REGENERATE && mes.tracker && Object.keys(mes.tracker).length !== 0) {
-			const tracker = serializeTracker(mes.tracker);
-			mes.mes = `<tracker>${tracker}</tracker>\n\n`;
-		} else if (type === ACTION_TYPES.SWIPE && mes.tracker && Object.keys(mes.tracker).length !== 0) {
-			if (mes.swipe_id == null) {
-				mes.swipe_id = 0;
-			}
-			if (!mes.swipes) {
-				mes.swipes = [mes.mes];
-			}
-			if (!mes.swipe_info) {
-				mes.swipe_info = [
-					{
-						send_date: mes.send_date,
-						gen_started: mes.gen_started,
-						gen_finished: mes.gen_finished,
-						extra: structuredClone(mes.extra),
-					},
-				];
-			}
-			const tracker = serializeTracker(mes.tracker);
-			const trackerString = `<tracker>${tracker}</tracker>\n\n`;
-			mes.swipes.push(trackerString);
-			mes.swipe_info.push({
-				send_date: getMessageTimeStamp(),
-				gen_started: null,
-				gen_finished: null,
-				extra: {
-					bias: extractMessageBias(trackerString),
-					gen_id: Date.now(),
-					api: "manual",
-					model: "slash command",
-				},
-			});
-			mes.swipe_id = mes.swipes.length - 1;
-			mes.mes = trackerString;
-			const mesDom = document.querySelector(`#chat .mes[mesid="${mesId}"]`);
-			mesDom.querySelector(".mes_text").innerHTML = messageFormatting(mes.mes, mes.name, mes.is_system, mes.is_user, Number(mesDom.getAttribute("mesid")));
-			[...mesDom.querySelectorAll(".swipes-counter")].forEach((it) => {
-				it.textContent = `${mes.swipe_id + 1}/${mes.swipes.length}`;
-			});
-		}
-	} else {
-		await refreshInlineTrackers(mesId, true);
-		await injectInlinePrompt();
-	}
-	chat_metadata.tracker.inlineTrackerId = mesId;
-	await saveChatConditional();
+	await handleStagedGeneration(type, options, dryRun);
 }
 
 /**
@@ -380,6 +216,7 @@ async function handleStagedGeneration(type, options, dryRun) {
 	// store explicit trackers directly on a message instead, so just drop any leftovers.
 	delete chat_metadata.tracker.tempTrackerId;
 	delete chat_metadata.tracker.tempTracker;
+	delete chat_metadata.tracker.inlineTrackerId;
 
 	const mesId = getLastNonSystemMessageIndex();
 	if (mesId === -1) {
@@ -491,19 +328,6 @@ export async function addTrackerToMessage(mesId) {
 	const manageStopButton = $("#mes_stop").css("display") === "none";
 	if (manageStopButton) deactivateSendButtons();
 	try {
-		if (extensionSettings.generationMode === generationModes.INLINE) {
-			const tempId = chat_metadata?.tracker?.inlineTrackerId ?? null;
-			// tempId null means no inline session is pending; without the guard, null arithmetic in
-			// getNextNonSystemMessageIndex (null + 1 === 1) would match message 1 and run a pointless extraction.
-			if (tempId != null && getNextNonSystemMessageIndex(tempId) === mesId) {
-				await extractAndSaveInlineTracker(mesId, true);
-				await removeInlineTrackers(true);
-			}
-			if(chat_metadata.tracker) chat_metadata.tracker.inlineTrackerId = null;
-			await saveChatConditional();
-			return;
-		}
-
 		if(isSystemMessage(mesId)) return;
 
 		if (chat_metadata?.tracker?.cmdTrackerOverride) {
@@ -533,8 +357,8 @@ export async function addTrackerToMessage(mesId) {
 }
 
 /**
- * Removes the tracker from a message: clears the stored tracker object, strips any inline
- * <tracker> block from the message text (inline mode), removes the preview, and saves the chat.
+ * Removes the tracker from a message: clears the stored tracker object, strips any legacy
+ * <tracker> block left in the message text by the retired inline mode, removes the preview, and saves the chat.
  * @param {number} mesId - The message index.
  * @returns {Promise<boolean>} true if a tracker was present and removed, false otherwise.
  */
@@ -544,11 +368,11 @@ export async function removeTrackerFromMessage(mesId) {
 
 	const hadTracker = !!(mes.tracker && Object.keys(mes.tracker).length > 0);
 
-	// Clear the canonical tracker store and any inline-tracker marker.
+	// Clear the canonical tracker store and the retired inline mode's marker.
 	delete mes.tracker;
 	delete mes.has_inline_tracker;
 
-	// Strip an inline <tracker> block from the message text (inline mode) and re-render its DOM.
+	// Strip a legacy inline <tracker> block from the message text and re-render its DOM.
 	let inlineStripped = false;
 	if (typeof mes.mes === "string" && /<tracker>[\s\S]*?<\/tracker>/i.test(mes.mes)) {
 		mes.mes = mes.mes.replace(/<tracker>[\s\S]*?<\/tracker>/gi, "").trim();

@@ -93,7 +93,9 @@ function conditionalSection(template, sectionName, condition, content) {
 
 /**
  * Sends a generation request using an independent connection profile.
- * @param {string} prompt - The prompt to send.
+ * @param {string|Array<{role: string, content: string}>} prompt - Either a flat prompt (sent as one user
+ *   message) or a structured list of chat messages. ST's ConnectionManagerRequestService passes the list
+ *   through for chat completion and renders it with the profile's instruct template for text completion.
  * @param {number|null} maxTokens - Maximum tokens to generate.
  * @returns {Promise<string>} The generated response.
  */
@@ -101,6 +103,7 @@ async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
 	// "current" means "use the connection profile's own preset". Any other value is a specific
 	// completion preset the user picked in the extension's "Dedicated Completion Preset" dropdown.
 	const usePreset = extensionSettings.selectedCompletionPreset && extensionSettings.selectedCompletionPreset !== "current";
+	const messages = Array.isArray(prompt) ? prompt : [{ role: "user", content: String(prompt ?? "") }];
 
 	// Restoration state for the temporary preset override (see below).
 	let overriddenProfile = null;
@@ -164,7 +167,7 @@ async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
 		log(`[Tracker Enhanced] 📤 About to call ctx.ConnectionManagerRequestService.sendRequest`);
 		log(`[Tracker Enhanced] Parameters:`, { 
 			profileId, 
-			promptLength: prompt?.length || 0, 
+			promptLength: messages.reduce((n, m) => n + (m.content?.length || 0), 0), 
 			maxTokens: effectiveMaxTokens,
 			selectedCompletionPreset: extensionSettings.selectedCompletionPreset
 		});
@@ -173,7 +176,7 @@ async function sendIndependentGenerationRequest(prompt, maxTokens = null) {
 		// is sent in both modes (the profile's own preset, or our temporary override above).
 		const response = await ctx.ConnectionManagerRequestService.sendRequest(
 			profileId,
-			[{ role: 'user', content: prompt }],
+			messages,
 			effectiveMaxTokens,
 			{
 				extractData: true,
@@ -252,112 +255,196 @@ export async function generateTracker(mesNum, includedFields = FIELD_INCLUDE_OPT
 }
 
 /**
- * Handles the single-stage generation mode.
- * @param {number} mesNum
+ * Handles the single-stage generation mode: one structured request to the tracker agent.
+ * @param {number} mesNum - The message the tracker is generated for (post-state).
  * @param {string} includedFields
- * @param {string|null} requestPrompt - If provided, use this request prompt directly.
+ * @param {string|null} firstStageMessage - Two-stage only: the changes list from stage one.
  */
 async function generateSingleStageTracker(mesNum, includedFields, firstStageMessage = null) {
-	// Build system and request prompts
-	const systemPrompt = await getGenerateSystemPrompt(mesNum, includedFields, firstStageMessage);
-	const requestPrompt = getRequestPrompt(extensionSettings.generateRequestPrompt, mesNum, includedFields, firstStageMessage);
+	const messages = await buildTrackerAgentMessages({
+		mesNum,
+		includedFields,
+		firstStageMessage,
+		systemTemplate: extensionSettings.generateSystemPrompt,
+		contextTemplate: extensionSettings.generateContextTemplate,
+		requestTemplate: extensionSettings.generateRequestPrompt,
+		recentMessagesTemplate: extensionSettings.generateRecentMessagesTemplate,
+	});
+	const responseLength = extensionSettings.responseLength > 0 ? extensionSettings.responseLength : null;
 
-	let responseLength = extensionSettings.responseLength > 0 ? extensionSettings.responseLength : null;
-
-	// Generate tracker using the AI model
-	log("Generating tracker with prompts:", { systemPrompt, requestPrompt, responseLength, mesNum });
-	log(`[Tracker Enhanced] 🎯 SINGLE-STAGE: About to call sendGenerateTrackerRequest`);
-	const tracker = await sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseLength);
+	log("Generating tracker with messages:", { messages, responseLength, mesNum });
+	const tracker = await sendGenerateTrackerRequest(messages, responseLength);
 	log(`[Tracker Enhanced] 🎯 SINGLE-STAGE: sendGenerateTrackerRequest returned:`, tracker);
-
 	return tracker;
 }
 
 /**
  * Handles the two-stage generation mode.
- * First: summarize changes (message summarization).
- * Second: generate tracker using the summary (firstStageMessage).
+ * Stage one lists what changed in the latest message; stage two is the single-stage generator fed
+ * with that list as {{firstStageMessage}}, applying only the listed changes.
  * @param {number} mesNum
  * @param {string} includedFields
  */
 async function generateTwoStageTracker(mesNum, includedFields) {
-	// Build system and request prompts for message summarization
-	const systemPrompt = await getMessageSummarizationSystemPrompt(mesNum, includedFields);
-	const requestPrompt = getRequestPrompt(extensionSettings.messageSummarizationRequestPrompt, mesNum, includedFields);
+	const responseLength = extensionSettings.responseLength > 0 ? extensionSettings.responseLength : null;
 
-	let responseLength = extensionSettings.responseLength > 0 ? extensionSettings.responseLength : null;
-
-	// Run the summarization stage to get the firstStageMessage
 	log(`[Tracker Enhanced] 📝 Stage 1/2: Message summarization using independent connection`);
-	const message = await sendIndependentGenerationRequest(systemPrompt + '\n\n' + requestPrompt, responseLength);
+	const stageOne = await buildTrackerAgentMessages({
+		mesNum,
+		includedFields,
+		systemTemplate: extensionSettings.messageSummarizationSystemPrompt,
+		contextTemplate: extensionSettings.messageSummarizationContextTemplate,
+		requestTemplate: extensionSettings.messageSummarizationRequestPrompt,
+		recentMessagesTemplate: extensionSettings.messageSummarizationRecentMessagesTemplate,
+	});
+	const message = await sendIndependentGenerationRequest(stageOne, responseLength);
 	debug("Message Summarized:", { message });
 
-	// Generate tracker using the AI model in single-stage manner but with the first stage message
 	log(`[Tracker Enhanced] 🎯 Stage 2/2: Tracker generation using independent connection`);
-	const tracker = await generateSingleStageTracker(mesNum, includedFields, message);
-
-	return tracker;
+	return await generateSingleStageTracker(mesNum, includedFields, message);
 }
 
 /**
- * Sends the generation request to the AI model and parses the tracker response.
- * @param {string} systemPrompt
- * @param {string} requestPrompt
+ * Parses the tracker agent's reply: unescapes JSON, pulls the <tracker> block, parses per format.
+ * @param {string} text - Raw model output.
+ * @returns {object|null} The parsed tracker, or null (with an error toast) when it cannot be parsed.
+ */
+function parseTrackerResponse(text) {
+	try {
+		let raw = String(text ?? "");
+		if (extensionSettings.trackerFormat == trackerFormat.JSON) raw = unescapeJsonString(raw);
+		const match = raw.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
+		const body = match ? match[1].trim() : null;
+		// yamlToJSON returns the parsed object (and throws on non-string/garbage input).
+		return extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(body) : JSON.parse(body);
+	} catch (e) {
+		error(`[Tracker Enhanced] ❌ Failed to parse tracker from model output:`, text, e);
+		toastr.error("Failed to parse the generated tracker. Make sure your token count is not low or set the response length override.");
+		return null;
+	}
+}
+
+/**
+ * Sends the structured tracker-agent request and parses the tracker from the reply.
+ * @param {Array<{role: string, content: string}>} messages
  * @param {number|null} responseLength
  */
-async function sendGenerateTrackerRequest(systemPrompt, requestPrompt, responseLength) {
+async function sendGenerateTrackerRequest(messages, responseLength) {
 	log(`[Tracker Enhanced] 📤 Sending tracker generation request via independent connection`);
-	log(`[Tracker Enhanced] 🔧 About to call sendIndependentGenerationRequest...`);
-	
 	try {
-		let tracker = await sendIndependentGenerationRequest(systemPrompt + '\n\n' + requestPrompt, responseLength);
-		log("Generated tracker:", { tracker });
-
-		let newTracker;
-		try {
-			if(extensionSettings.trackerFormat == trackerFormat.JSON) tracker = unescapeJsonString(tracker);
-			const trackerContent = tracker.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
-			const result = trackerContent ? trackerContent[1].trim() : null;
-			// yamlToJSON returns the parsed object (and throws on non-string/garbage input,
-			// which the catch below turns into the parse-failure toast).
-			newTracker = extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(result) : JSON.parse(result);
-			log(`[Tracker Enhanced] ✅ Successfully parsed tracker response from independent connection`);
-		} catch (e) {
-			error(`[Tracker Enhanced] ❌ Failed to parse tracker from independent connection:`, tracker, e);
-			toastr.error("Failed to parse the generated tracker. Make sure your token count is not low or set the response length override.");
-			return null;
-		}
-
-		log("Parsed tracker:", { newTracker });
-		return newTracker;
-		
+		const text = await sendIndependentGenerationRequest(messages, responseLength);
+		log("Generated tracker:", { tracker: text });
+		return parseTrackerResponse(text);
 	} catch (err) {
-		error(`[Tracker Enhanced] ❌ sendIndependentGenerationRequest failed, falling back to old method:`, err);
-		
-		// Fallback to the old generateRaw method if independent connection fails
-		log(`[Tracker Enhanced] 🔄 Using fallback: generateRaw`);
-		let tracker = await generateRaw(systemPrompt + '\n\n' + requestPrompt, null, false, false, '', responseLength);
-		log("Generated tracker (fallback):", { tracker });
-
-		let newTracker;
-		try {
-			if(extensionSettings.trackerFormat == trackerFormat.JSON) tracker = unescapeJsonString(tracker);
-			const trackerContent = tracker.match(/<(?:tracker|Tracker)>([\s\S]*?)<\/(?:tracker|Tracker)>/);
-			const result = trackerContent ? trackerContent[1].trim() : null;
-			newTracker = extensionSettings.trackerFormat == trackerFormat.YAML ? yamlToJSON(result) : JSON.parse(result);
-			log(`[Tracker Enhanced] ✅ Successfully parsed tracker response from fallback method`);
-		} catch (e) {
-			error(`[Tracker Enhanced] ❌ Failed to parse tracker from fallback method:`, tracker, e);
-			toastr.error("Failed to parse the generated tracker. Make sure your token count is not low or set the response length override.");
-			return null;
-		}
-
-		log("Parsed tracker (fallback):", { newTracker });
-		return newTracker;
+		error(`[Tracker Enhanced] ❌ sendIndependentGenerationRequest failed, falling back to generateRaw:`, err);
+		// Fallback to the main connection. generateRaw takes a flat prompt, so the turns are joined.
+		const flat = messages.map((m) => m.content).join("\n\n");
+		const text = await generateRaw(flat, null, false, false, '', responseLength);
+		return parseTrackerResponse(text);
 	}
 }
 
 // #region Tracker Prompt Functions
+
+/**
+ * Control tokens and HTML comments that legacy context templates carried over from the
+ * text-completion era (hard-coded Llama 3 headers, "<!-- Start of Context -->" markers). With
+ * structured messages the backend's own chat template supplies the real tokens, and as literal text
+ * these are noise at best and a fake "system" header inside a user turn at worst.
+ */
+const LEGACY_TEMPLATE_NOISE = /<\|begin_of_text\|>|<\|start_header_id\|>\s*\w+\s*<\|end_header_id\|>|<\|eot_id\|>|<\|end_of_text\|>|<\|im_start\|>\w*|<\|im_end\|>|<!--\s*(?:Start|End) of [^>]*-->/g;
+
+/**
+ * Cleans a rendered prompt piece: strips legacy template noise, removes the hollow
+ * "### Current Tracker <tracker></tracker>" block legacy templates render now that the current
+ * tracker travels as the assistant turn, and collapses blank lines.
+ * @param {string} text
+ * @returns {string}
+ */
+function cleanPromptPiece(text) {
+	return String(text ?? "")
+		.replace(LEGACY_TEMPLATE_NOISE, "")
+		.replace(/\n#+\s*Current Tracker\s*\n\s*<tracker>\s*<\/tracker>\s*/gi, "\n")
+		.replace(/<tracker>\s*<\/tracker>/g, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
+/**
+ * Removes any <tracker> block from a message's text (legacy inline mode, or trackers quoted in prose).
+ * @param {string} text
+ * @returns {string}
+ */
+function stripTrackerBlocks(text) {
+	return String(text ?? "").replace(/<tracker>[\s\S]*?<\/tracker>/g, "").trim();
+}
+
+/**
+ * Builds the structured chat messages for a tracker-agent request (see AGENTS.md, "Tracker agent
+ * request layout"):
+ *
+ *   system    - the agent's rules (the system template rendered on its own)
+ *   user      - reference material: the context template, with recent messages up to the message
+ *               BEFORE the analysed one
+ *   assistant - the current tracker (the state after that previous message) as the agent's own last output
+ *   user      - the analysed message plus the request prompt
+ *
+ * The tracker therefore sits at its exact place in the timeline, the rules carry the system role, and
+ * the request is the last thing the model reads. Turn order is user/assistant/user, so backends that
+ * enforce alternation accept it without placeholders. {{trackerSystemPrompt}}, {{messageSummarizationSystemPrompt}}
+ * and {{currentTracker}} render empty inside the context template: their content travels in its own turn.
+ * @param {object} args
+ * @param {number} args.mesNum - The analysed message (the tracker produced describes the state after it).
+ * @param {string} args.includedFields
+ * @param {string} args.systemTemplate
+ * @param {string} args.contextTemplate
+ * @param {string} args.requestTemplate
+ * @param {string} [args.recentMessagesTemplate]
+ * @param {string|null} [args.firstStageMessage] - Two-stage only: the changes list from stage one.
+ * @returns {Promise<Array<{role: string, content: string}>>}
+ */
+async function buildTrackerAgentMessages({ mesNum, includedFields, systemTemplate, contextTemplate, requestTemplate, recentMessagesTemplate = "", firstStageMessage = null }) {
+	const systemPrompt = cleanPromptPiece(getSystemPrompt(systemTemplate || "", includedFields));
+	const characterDescriptions = getCharacterDescriptions();
+	const worldInfo = await getActiveWorldInfo(mesNum);
+	const trackerExamples = getExampleTrackers(includedFields);
+	// Context stops at the message before the analysed one; the analysed message goes in the final turn.
+	const recentMessages = recentMessagesTemplate ? (getRecentMessages(recentMessagesTemplate, mesNum - 1, includedFields) || "") : "";
+	const trackerFieldPrompt = getTrackerPrompt(extensionSettings.trackerDef, includedFields);
+
+	const vars = {
+		trackerSystemPrompt: "",
+		messageSummarizationSystemPrompt: "",
+		currentTracker: "",
+		characterDescriptions,
+		worldInfo,
+		trackerExamples,
+		recentMessages,
+		trackerFormat: extensionSettings.trackerFormat,
+		trackerFieldPrompt,
+		firstStageMessage: firstStageMessage || "",
+	};
+	const context = cleanPromptPiece(formatTemplate(contextTemplate || "", vars));
+
+	// getCurrentTracker(mesNum) is the state BEFORE mesNum (post-state of the previous message).
+	const currentTracker = getCurrentTracker(mesNum, includedFields);
+	const assistant = `<tracker>\n${currentTracker}\n</tracker>`;
+
+	const latest = chat[mesNum];
+	const latestMessage = latest ? `${latest.name}: ${stripTrackerBlocks(latest.mes)}` : "";
+	let request = cleanPromptPiece(getRequestPrompt(requestTemplate || "", mesNum, includedFields, firstStageMessage));
+	if (latestMessage && !/{{\s*(?:message|latestMessage)\s*}}/.test(requestTemplate || "")) {
+		// The analysed message must be in the final turn; templates without a message macro get it here.
+		request = `### Latest Message\n${latestMessage}\n\n${request}`;
+	}
+
+	const messages = [];
+	if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+	messages.push({ role: "user", content: context || "(no additional context)" });
+	messages.push({ role: "assistant", content: assistant });
+	messages.push({ role: "user", content: request });
+	return messages;
+}
 
 /**
  * Scans the recent chat messages for active World Info / lorebook entries and returns their
@@ -388,73 +475,6 @@ async function getActiveWorldInfo(mesNum) {
 		warn(`[Tracker Enhanced] Failed to gather world info for tracker:`, e?.message);
 		return "";
 	}
-}
-
-/**
- * Constructs the generate tracker system prompt for the AI model based on the current mode. {{trackerSystemPrompt}}, {{characterDescriptions}}, {{worldInfo}}, {{trackerExamples}}, {{recentMessages}}, {{currentTracker}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{firstStageMessage}}
- * Uses `extensionSettings.generateContextTemplate` and `extensionSettings.generateSystemPrompt`.
- * @param {number} mesNum
- * @param {string} includedFields
- * @returns {Promise<string>} The system prompt.
- */
-async function getGenerateSystemPrompt(mesNum, includedFields = FIELD_INCLUDE_OPTIONS.DYNAMIC, firstStageMessage = null) {
-	const trackerSystemPrompt = getSystemPrompt(extensionSettings.generateSystemPrompt, includedFields);
-	const characterDescriptions = getCharacterDescriptions();
-	const worldInfo = await getActiveWorldInfo(mesNum);
-	const trackerExamples = getExampleTrackers(includedFields);
-	const recentMessages = getRecentMessages(extensionSettings.generateRecentMessagesTemplate, mesNum, includedFields);
-	const currentTracker = getCurrentTracker(mesNum, includedFields);
-	const trackerFormat = extensionSettings.trackerFormat;
-	const trackerFieldPrompt = getTrackerPrompt(extensionSettings.trackerDef, includedFields);
-
-	const vars = {
-		trackerSystemPrompt,
-		characterDescriptions,
-		worldInfo,
-		trackerExamples,
-		recentMessages,
-		currentTracker,
-		trackerFormat,
-		trackerFieldPrompt,
-		firstStageMessage: firstStageMessage || "", // Only in two-stage mode
-	};
-
-	debug("Generated Tacker Generation System Prompt:", vars);
-	return formatTemplate(extensionSettings.generateContextTemplate, vars);
-}
-
-/**
- * Constructs the message summarization system prompt for the AI model in two-stage mode. {{trackerSystemPrompt}}, {{characterDescriptions}}, {{trackerExamples}}, {{recentMessages}}, {{currentTracker}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{messageSummarizationSystemPrompt}}
- * Uses `extensionSettings.messageSummarizationContextTemplate` and `extensionSettings.messageSummarizationSystemPrompt`.
- * @param {number} mesNum
- * @param {string} includedFields
- * @returns {string} The system prompt.
- */
-async function getMessageSummarizationSystemPrompt(mesNum, includedFields) {
-	const trackerSystemPrompt = getSystemPrompt(extensionSettings.messageSummarizationSystemPrompt, includedFields);
-	const messageSummarizationSystemPrompt = getSystemPrompt(extensionSettings.messageSummarizationSystemPrompt, includedFields);
-	const characterDescriptions = getCharacterDescriptions();
-	const worldInfo = await getActiveWorldInfo(mesNum);
-	const trackerExamples = getExampleTrackers(includedFields);
-	const recentMessages = extensionSettings.messageSummarizationRecentMessagesTemplate ? getRecentMessages(extensionSettings.messageSummarizationRecentMessagesTemplate, mesNum, includedFields) || "" : "";
-	const currentTracker = getCurrentTracker(mesNum, includedFields);
-	const trackerFormat = extensionSettings.trackerFormat;
-	const trackerFieldPrompt = getTrackerPrompt(extensionSettings.trackerDef, includedFields);
-
-	const vars = {
-		trackerSystemPrompt,
-		messageSummarizationSystemPrompt,
-		characterDescriptions,
-		worldInfo,
-		trackerExamples,
-		recentMessages,
-		currentTracker,
-		trackerFormat,
-		trackerFieldPrompt,
-	};
-
-	debug("Generated Message Summarization System Prompt (Summarization):", vars);
-	return formatTemplate(extensionSettings.messageSummarizationContextTemplate, vars);
 }
 
 /**
@@ -557,7 +577,7 @@ function getCharacterDescriptions() {
 	// session's accumulated character state (important for world consistency on long RPs).
 	const sessionCharacters = getSessionCharacters();
 	if (sessionCharacters) {
-		result += `\n\n### Session Characters\n<!-- Start of Session Characters -->\n${sessionCharacters}\n<!-- End of Session Characters -->`;
+		result += `\n\n### Session Characters\n${sessionCharacters}`;
 	}
 
 	return result.trim();
@@ -638,14 +658,16 @@ function getExampleTrackers(includedFields) {
  */
 export function getRequestPrompt(template, mesNum = null, includedFields, firstStage = null) {
 	let messageText = "";
-	if (mesNum != null) {
+	let latestMessage = "";
+	if (mesNum != null && chat[mesNum]) {
 		const message = chat[mesNum];
-		messageText = message.mes;
+		messageText = stripTrackerBlocks(message.mes);
+		latestMessage = `${message.name}: ${messageText}`;
 	}
 
 	const trackerFieldPromptVal = getTrackerPrompt(extensionSettings.trackerDef, includedFields);
 
-	// {{defaultTracker}} is offered alongside the other macros (the default inline request prompt
+	// {{defaultTracker}} is offered alongside the other macros (some request prompts
 	// uses it); without it the literal macro text was sent to the model.
 	let defaultTrackerVal = getDefaultTracker(extensionSettings.trackerDef, includedFields, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
 	if (extensionSettings.trackerFormat == trackerFormat.JSON) {
@@ -654,6 +676,7 @@ export function getRequestPrompt(template, mesNum = null, includedFields, firstS
 
 	const vars = {
 		message: messageText,
+		latestMessage,
 		trackerFieldPrompt: trackerFieldPromptVal,
 		trackerFormat: extensionSettings.trackerFormat,
 		defaultTracker: defaultTrackerVal,

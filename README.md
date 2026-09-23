@@ -4,6 +4,10 @@ A tracker extension for SillyTavern that monitors character and scene state acro
 
 ## Changelog
 
+### 24-09-2026 (2.0.0)
+- **Tracker agent requests are now structured chat messages** instead of one flat user message: `system` = the agent's rules, `user` = context (characters, world info, examples, recent messages up to the one before the analysed message), `assistant` = the current tracker as the agent's own previous output, `user` = the analysed message plus the request. The default templates lost their hard-coded Llama 3 tokens and HTML comment markers; saved templates equal to an old default are upgraded automatically, customised ones keep working (moved macros render empty, legacy tokens are stripped at render time). New request macro `{{latestMessage}}`. Text completion profiles get the same messages rendered through the profile's instruct template.
+- **Inline generation mode removed.** It made the main model prepend a `<tracker>` block to every reply, which contradicts the independent-agent design and produced pre-state trackers. Settings and presets using it are moved to Single-Stage; the `Default-Inline` preset is dropped.
+
 ### 23-09-2026
 - **Tracker semantics are now post-state.** The tracker stored on a message describes the scene *after* that message (it is generated from the chat up to and including it). Before, it described the scene *before* the message, which made every fresh reply see a state two messages old with the *Character* target, and made swipes/regenerates reuse the tracker of the text being replaced. Now the model always gets the latest tracker before the message being generated, and redoing a reply drops that reply's tracker so it is regenerated for the new text. **Generation Target defaults to User** (recommended: complete state, swipe-proof, one tracker generation per send). Existing chats need no migration: their old trackers are off by one message and are superseded by the first new tracker.
 - Fixed: swiping or regenerating a reply whose tracker was empty injected nothing instead of falling back to the previous tracker.

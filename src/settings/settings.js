@@ -2,8 +2,8 @@ import { saveSettingsDebounced } from "../../../../../../script.js";
 import { getContext } from '../../../../../../scripts/extensions.js';
 
 import { extensionFolderPath, extensionSettings } from "../../index.js";
-import { error, debug, toTitleCase } from "../../lib/utils.js";
-import { defaultSettings, generationModes, generationTargets } from "./defaultSettings.js";
+import { error, debug, toTitleCase, log, warn } from "../../lib/utils.js";
+import { defaultSettings, generationModes, generationTargets, legacyTemplates } from "./defaultSettings.js";
 import { generationCaptured } from "../../lib/interconnection.js";
 import { TrackerPromptMakerModal } from "../ui/trackerPromptMakerModal.js";
 import { TrackerTemplateGenerator } from "../ui/components/trackerTemplateGenerator.js";
@@ -73,9 +73,89 @@ export async function initSettings() {
 		}
 	}
 
+	migrateRetiredInlineMode(extensionSettings);
+	migrateLegacyTemplates(extensionSettings);
+
 	saveSettingsDebounced();
 
 	await loadSettingsUI();
+}
+
+/**
+ * 2.0.0 sends the tracker agent structured messages (system / user context / assistant current tracker /
+ * user request) instead of one flat user message, and the default templates lost their hard-coded
+ * Llama 3 tokens, HTML comments, {{trackerSystemPrompt}} and "### Current Tracker" block. Saved
+ * templates that still equal a pre-2.0 default are swapped for the new default; customised templates are
+ * left alone (the request builder blanks the moved macros and strips the legacy tokens at render time).
+ * @param {object} settings The live extension settings object (mutated in place).
+ */
+function migrateLegacyTemplates(settings) {
+	const single = defaultSettings.presets["Default-SingleStage"];
+	const two = defaultSettings.presets["Default-TwoStage"];
+	const rpg = defaultSettings.presets["RPG - Timeless"];
+	const swaps = [
+		["generateContextTemplate", legacyTemplates.generateContextTemplate, single.generateContextTemplate],
+		["generateContextTemplate", legacyTemplates.twoStageGenerateContextTemplate, two.generateContextTemplate],
+		["messageSummarizationContextTemplate", legacyTemplates.messageSummarizationContextTemplate, two.messageSummarizationContextTemplate],
+		["generateRequestPrompt", legacyTemplates.generateRequestPrompt, single.generateRequestPrompt],
+		["generateRequestPrompt", legacyTemplates.techmagoGenerateRequestPrompt, rpg.generateRequestPrompt],
+		["generateRequestPrompt", legacyTemplates.twoStageGenerateRequestPrompt, two.generateRequestPrompt],
+	];
+	let touched = 0;
+	const apply = (target) => {
+		if (!target || typeof target !== "object") return;
+		for (const [key, legacyValue, newValue] of swaps) {
+			if (target[key] === legacyValue) {
+				target[key] = newValue;
+				touched++;
+			}
+		}
+	};
+	apply(settings);
+	for (const preset of Object.values(settings.presets ?? {})) apply(preset);
+	if (touched) log(`Migrated ${touched} default tracker template(s) to the 2.0 structured-message layout.`);
+}
+
+/**
+ * Inline mode (the main model prepending a <tracker> block to every reply) was retired in 2.0.0: it
+ * contradicted the independent-agent design and its trackers described the state BEFORE a message,
+ * unlike the post-state semantics used everywhere else. Settings and presets that still reference it
+ * are moved to single-stage; the bundled "Default-Inline" preset and the inline prompt field are dropped.
+ * @param {object} settings The live extension settings object (mutated in place).
+ */
+function migrateRetiredInlineMode(settings) {
+	const RETIRED_MODE = "inline";
+	let touched = false;
+	if (settings.generationMode === RETIRED_MODE) {
+		settings.generationMode = generationModes.SINGLE_STAGE;
+		touched = true;
+	}
+	if ("inlineRequestPrompt" in settings) {
+		delete settings.inlineRequestPrompt;
+		touched = true;
+	}
+	if (settings.presets && typeof settings.presets === "object") {
+		if ("Default-Inline" in settings.presets) {
+			delete settings.presets["Default-Inline"];
+			touched = true;
+		}
+		for (const preset of Object.values(settings.presets)) {
+			if (!preset || typeof preset !== "object") continue;
+			if (preset.generationMode === RETIRED_MODE) {
+				preset.generationMode = generationModes.SINGLE_STAGE;
+				touched = true;
+			}
+			if ("inlineRequestPrompt" in preset) {
+				delete preset.inlineRequestPrompt;
+				touched = true;
+			}
+		}
+		if (settings.selectedPreset === "Default-Inline") {
+			settings.selectedPreset = "Default-SingleStage";
+			touched = true;
+		}
+	}
+	if (touched) warn("Inline generation mode was retired; affected settings/presets were moved to single-stage.");
 }
 
 /**
@@ -146,7 +226,6 @@ function setSettingsInitialValues() {
 	$("#tracker_enhanced_system_prompt").val(extensionSettings.generateSystemPrompt);
 	$("#tracker_enhanced_request_prompt").val(extensionSettings.generateRequestPrompt);
 	$("#tracker_enhanced_recent_messages").val(extensionSettings.generateRecentMessagesTemplate);
-	$("#tracker_enhanced_inline_request_prompt").val(extensionSettings.inlineRequestPrompt);
 	$("#tracker_enhanced_message_summarization_context_template").val(extensionSettings.messageSummarizationContextTemplate);
 	$("#tracker_enhanced_message_summarization_system_prompt").val(extensionSettings.messageSummarizationSystemPrompt);
 	$("#tracker_enhanced_message_summarization_request_prompt").val(extensionSettings.messageSummarizationRequestPrompt);
@@ -198,7 +277,6 @@ function registerSettingsListeners() {
 	$("#tracker_enhanced_system_prompt").on("input", onSettingInputareaInput("generateSystemPrompt"));
 	$("#tracker_enhanced_request_prompt").on("input", onSettingInputareaInput("generateRequestPrompt"));
 	$("#tracker_enhanced_recent_messages").on("input", onSettingInputareaInput("generateRecentMessagesTemplate"));
-	$("#tracker_enhanced_inline_request_prompt").on("input", onSettingInputareaInput("inlineRequestPrompt"));
 	$("#tracker_enhanced_message_summarization_context_template").on("input", onSettingInputareaInput("messageSummarizationContextTemplate"));
 	$("#tracker_enhanced_message_summarization_system_prompt").on("input", onSettingInputareaInput("messageSummarizationSystemPrompt"));
 	$("#tracker_enhanced_message_summarization_request_prompt").on("input", onSettingInputareaInput("messageSummarizationRequestPrompt"));
@@ -662,7 +740,6 @@ function getCurrentPresetSettings() {
 		messageSummarizationRequestPrompt: extensionSettings.messageSummarizationRequestPrompt,
 		messageSummarizationRecentMessagesTemplate: extensionSettings.messageSummarizationRecentMessagesTemplate,
 
-		inlineRequestPrompt: extensionSettings.inlineRequestPrompt,
 		
 		characterDescriptionTemplate: extensionSettings.characterDescriptionTemplate,
 
@@ -954,12 +1031,9 @@ function updateFieldVisibility(mode) {
 	// Hide all sections first
 	$("#generate_context_section").hide();
 	$("#message_summarization_section").hide();
-	$("#inline_request_section").hide();
 
 	// Show fields based on the selected mode
-	if (mode === generationModes.INLINE) {
-		$("#inline_request_section").show();
-	} else if (mode === generationModes.SINGLE_STAGE) {
+	if (mode === generationModes.SINGLE_STAGE) {
 		$("#generate_context_section").show();
 	} else if (mode === generationModes.TWO_STAGE) {
 		$("#generate_context_section").show();

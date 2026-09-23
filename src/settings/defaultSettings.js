@@ -1,7 +1,6 @@
 //#region Setting Enums
 
 export const generationModes = {
-	INLINE: "inline",
 	SINGLE_STAGE: "single-stage",
 	TWO_STAGE: "two-stage",
 };
@@ -35,33 +34,16 @@ export const PREVIEW_PLACEMENT = {
 
 //#region Two Stage
 
-const twoStageGenerateContextTemplate = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-
-{{trackerSystemPrompt}}
-
-<!-- Start of Context -->
-
-{{characterDescriptions}}
+const twoStageGenerateContextTemplate = `{{characterDescriptions}}
 
 ### World Info
-<!-- Start of World Info -->
 {{worldInfo}}
-<!-- End of World Info -->
 
 ### Example Trackers
-<!-- Start of Example Trackers -->
 {{trackerExamples}}
-<!-- End of Example Trackers -->
 
-### Current Tracker
-<tracker>
-{{currentTracker}}
-</tracker>
-
-### Changes List
-{{firstStageMessage}}
-
-<!-- End of Context --><|eot_id|>`;
+### Recent Messages
+{{recentMessages}}`;
 const twoStageGenerateSystemPrompt = `You are a Scene Tracker Assistant, tasked with providing clear, consistent, and structured updates to a scene tracker for a roleplay. Use the provided changes list, previous tracker details, and recent context to accurately update the tracker. Your response must follow the specified {{trackerFormat}} structure exactly, ensuring that each field is filled and complete.
 
 ### Key Instructions:
@@ -104,35 +86,22 @@ const twoStageGenerateRequestPrompt = `[Use the provided changes list below to u
 ### Changes List:
 {{firstStageMessage}}
 
+### Latest Message
+{{latestMessage}}
+
 ### Response Rules:
 {{trackerFieldPrompt}}
 
 Ensure the response remains consistent, strictly follows this structure in {{trackerFormat}}, and omits any extra data or deviations. You MUST enclose the tracker in <tracker></tracker> tags.]`;
 
-const messageSummarizationContextTemplate = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-
-{{messageSummarizationSystemPrompt}}
-
-<!-- Start of Context -->
-
-### World Info
-<!-- Start of World Info -->
+const messageSummarizationContextTemplate = `### World Info
 {{worldInfo}}
-<!-- End of World Info -->
-
-### Current Tracker
-<tracker>
-{{currentTracker}}
-</tracker>
 
 ### Recent Messages
 {{recentMessages}}
 
 ### Tracker Field Guidelines
-{{trackerFieldPrompt}}
-
-<!-- End of Context -->
-<|eot_id|>`;
+{{trackerFieldPrompt}}`;
 const messageSummarizationSystemPrompt = `You are a Scene Change Detector. Your task is to analyze the latest message and identify all relevant changes or updates for a scene tracker.
 
 ### Instructions:
@@ -184,65 +153,19 @@ const messageSummarizationRecentMessagesTemplate = `{{char}}: {{message}}`;
 
 //#endregion
 
-//#region Inline
-
-const inlineRequestPrompt = `[At the beginning of every response, prepend an updated tracker to reflect the current scene. Use the provided tracker format, field guidelines, and default structure to ensure consistency and accuracy.
-
-### Instructions:
-1. **Tracker Updates**:
-   - Update the tracker fields based on the latest message and logical inferences using:
-     - The provided tracker field guidelines.
-     - The current tracker as the base for continuity.
-     - Logical assumptions if explicit details are missing, informed by prior context.
-2. **Time Progression**:
-   - Progress time incrementally unless a time skip is explicitly indicated (e.g., sleeping, traveling, or user requests).
-3. **Weather Updates**:
-   - Update or infer weather conditions based on the setting, time, and scene location.
-4. **Tracker Format**:
-   - Use the exact tracker structure provided in the default tracker template.
-   - Ensure all fields are present and complete, even if unchanged.
-
-### Tracker Format:
-<tracker>
-{{defaultTracker}}
-</tracker>
-
-### Tracker Guidelines:
-{{trackerFieldPrompt}}
-
-Ensure every response starts with a tracker in the specified format, followed by the regular message content.]`;
-
-//#endregion
 
 //#region Shared
 
-const generateContextTemplate = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-
-{{trackerSystemPrompt}}
-
-<!-- Start of Context -->
-
-{{characterDescriptions}}
+const generateContextTemplate = `{{characterDescriptions}}
 
 ### World Info
-<!-- Start of World Info -->
 {{worldInfo}}
-<!-- End of World Info -->
 
 ### Example Trackers
-<!-- Start of Example Trackers -->
 {{trackerExamples}}
-<!-- End of Example Trackers -->
 
-### Recent Messages with Trackers
-{{recentMessages}}
-
-### Current Tracker
-<tracker>
-{{currentTracker}}
-</tracker>
-
-<!-- End of Context --><|eot_id|>`;
+### Recent Messages
+{{recentMessages}}`;
 const generateSystemPrompt = `You are a Scene Tracker Assistant, tasked with providing clear, consistent, and structured updates to a scene tracker for a roleplay. Use the latest message, previous tracker details, and context from recent messages to accurately update the tracker. Your response must follow the specified {{trackerFormat}} structure exactly, ensuring that each field is filled and complete. If specific information is not provided, make reasonable assumptions based on prior descriptions, logical inferences, or default character details.
 
 ### Key Instructions:
@@ -278,7 +201,10 @@ Return your response in the following {{trackerFormat}} structure, following thi
 3. **Complete Entries**: Always provide the full tracker in {{trackerFormat}}, even if only minor updates are made.
 
 Your primary objective is to ensure clarity, consistency, and structured responses for scene tracking in {{trackerFormat}} format, providing complete details even when specifics are not explicitly stated.`;
-const generateRequestPrompt = `[Analyze the previous message along with the recent messages provided below and update the current scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time.
+const generateRequestPrompt = `[Analyze the latest message below, together with the recent messages above and the tracker you last produced, and update the scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time.
+
+### Latest Message
+{{latestMessage}}
 
 ### Response Rules:
 {{trackerFieldPrompt}}
@@ -634,7 +560,10 @@ Return your response in the following {{trackerFormat}} structure, following thi
 Your primary objective is to ensure clarity, consistency, and structured responses for scene tracking in {{trackerFormat}} format, providing complete details even when specifics are not explicitly stated.
 Only output characters present in the scene.`;
 
-const techmagoGenerateRequestPrompt = `[Analyze the previous message along with the recent messages provided below and update the current scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time. Only output characters present in the scene.
+const techmagoGenerateRequestPrompt = `[Analyze the latest message below, together with the recent messages above and the tracker you last produced, and update the scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time. Only output characters present in the scene.
+
+### Latest Message
+{{latestMessage}}
 
 ### Response Rules:
 {{trackerFieldPrompt}}
@@ -958,7 +887,6 @@ export const defaultSettings = {
 	messageSummarizationRequestPrompt: "",
 	messageSummarizationRecentMessagesTemplate: "",
 
-	inlineRequestPrompt: "",
 
 	characterDescriptionTemplate: characterDescriptionTemplate,
 
@@ -988,8 +916,6 @@ export const defaultSettings = {
 			messageSummarizationRequestPrompt: "",
 			messageSummarizationRecentMessagesTemplate: "",
 
-			inlineRequestPrompt: "",
-
 			characterDescriptionTemplate: characterDescriptionTemplate,
 
 			mesTrackerTemplate: mesTrackerTemplate,
@@ -1008,29 +934,6 @@ export const defaultSettings = {
 			messageSummarizationSystemPrompt: messageSummarizationSystemPrompt,
 			messageSummarizationRequestPrompt: messageSummarizationRequestPrompt,
 			messageSummarizationRecentMessagesTemplate: messageSummarizationRecentMessagesTemplate,
-
-			inlineRequestPrompt: "",
-
-			characterDescriptionTemplate: characterDescriptionTemplate,
-
-			mesTrackerTemplate: mesTrackerTemplate,
-			mesTrackerJavascript: mesTrackerJavascript,
-			trackerDef: trackerDef,
-		},
-		"Default-Inline": {
-			generationMode: generationModes.INLINE,
-
-			generateContextTemplate: generateContextTemplate,
-			generateSystemPrompt: generateSystemPrompt,
-			generateRequestPrompt: generateRequestPrompt,
-			generateRecentMessagesTemplate: generateRecentMessagesTemplate,
-
-			messageSummarizationContextTemplate: "",
-			messageSummarizationSystemPrompt: "",
-			messageSummarizationRequestPrompt: "",
-			messageSummarizationRecentMessagesTemplate: "",
-
-			inlineRequestPrompt: inlineRequestPrompt,
 
 			characterDescriptionTemplate: characterDescriptionTemplate,
 
@@ -1051,8 +954,6 @@ export const defaultSettings = {
 			messageSummarizationRequestPrompt: "",
 			messageSummarizationRecentMessagesTemplate: "",
 
-			inlineRequestPrompt: "",
-
 			characterDescriptionTemplate: characterDescriptionTemplate,
 
 			mesTrackerTemplate: techmagoTimelessMesTrackerTemplate,
@@ -1072,8 +973,6 @@ export const defaultSettings = {
 			messageSummarizationRequestPrompt: "",
 			messageSummarizationRecentMessagesTemplate: "",
 
-			inlineRequestPrompt: "",
-
 			characterDescriptionTemplate: characterDescriptionTemplate,
 
 			mesTrackerTemplate: techmagoRpgTimelessMesTrackerTemplate,
@@ -1083,3 +982,113 @@ export const defaultSettings = {
 	},
 	debugMode: false,
 };
+
+//#region Legacy templates (for settings migration only)
+
+/**
+ * Pre-2.0 default templates. initSettings() swaps a saved template that still equals one of these for
+ * its 2.0 replacement, so the UI shows the structured-message defaults without touching customised ones.
+ */
+export const legacyTemplates = {
+	generateContextTemplate: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+{{trackerSystemPrompt}}
+
+<!-- Start of Context -->
+
+{{characterDescriptions}}
+
+### World Info
+<!-- Start of World Info -->
+{{worldInfo}}
+<!-- End of World Info -->
+
+### Example Trackers
+<!-- Start of Example Trackers -->
+{{trackerExamples}}
+<!-- End of Example Trackers -->
+
+### Recent Messages with Trackers
+{{recentMessages}}
+
+### Current Tracker
+<tracker>
+{{currentTracker}}
+</tracker>
+
+<!-- End of Context --><|eot_id|>`,
+	twoStageGenerateContextTemplate: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+{{trackerSystemPrompt}}
+
+<!-- Start of Context -->
+
+{{characterDescriptions}}
+
+### World Info
+<!-- Start of World Info -->
+{{worldInfo}}
+<!-- End of World Info -->
+
+### Example Trackers
+<!-- Start of Example Trackers -->
+{{trackerExamples}}
+<!-- End of Example Trackers -->
+
+### Current Tracker
+<tracker>
+{{currentTracker}}
+</tracker>
+
+### Changes List
+{{firstStageMessage}}
+
+<!-- End of Context --><|eot_id|>`,
+	messageSummarizationContextTemplate: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+{{messageSummarizationSystemPrompt}}
+
+<!-- Start of Context -->
+
+### World Info
+<!-- Start of World Info -->
+{{worldInfo}}
+<!-- End of World Info -->
+
+### Current Tracker
+<tracker>
+{{currentTracker}}
+</tracker>
+
+### Recent Messages
+{{recentMessages}}
+
+### Tracker Field Guidelines
+{{trackerFieldPrompt}}
+
+<!-- End of Context -->
+<|eot_id|>`,
+	generateRequestPrompt: `[Analyze the previous message along with the recent messages provided below and update the current scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time.
+
+### Response Rules:
+{{trackerFieldPrompt}}
+
+Ensure the response remains consistent, strictly follows this structure in {{trackerFormat}}, and omits any extra data or deviations. You MUST enclose the tracker in <tracker></tracker> tags]`,
+	techmagoGenerateRequestPrompt: `[Analyze the previous message along with the recent messages provided below and update the current scene tracker based on logical inferences and explicit details. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time. Only output characters present in the scene.
+
+### Response Rules:
+{{trackerFieldPrompt}}
+
+Ensure the response remains consistent, strictly follows this structure in {{trackerFormat}}, and omits any extra data or deviations. NEVER use markdown in the output. Respond only the tracker block with no commentary. You MUST enclose the tracker in html tags <tracker> AND </tracker>. Output ONLY the final version of the tracker, updated with the data from the newer messages]`,
+	twoStageGenerateRequestPrompt: `[Use the provided changes list below to update the current scene tracker based on explicit details. Do not infer additional changes beyond those listed. Pause and ensure only the tracked data is provided, formatted in {{trackerFormat}}. Avoid adding, omitting, or rearranging fields unless specified. Respond with the full tracker every time.
+
+### Changes List:
+{{firstStageMessage}}
+
+### Response Rules:
+{{trackerFieldPrompt}}
+
+Ensure the response remains consistent, strictly follows this structure in {{trackerFormat}}, and omits any extra data or deviations. You MUST enclose the tracker in <tracker></tracker> tags.]`,
+};
+
+//#endregion

@@ -118,13 +118,11 @@
 					<div class="tracker-block m-b-1 m-t-1">
 						<label for="tracker_enhanced_generation_mode">Generation Mode</label><br />
 						<small
-							>Select how the tracker updates:<br />
-							- Inline: Adds the tracker to the beginning of every message.<br />
-							- Single-Stage: Sends one prompt to update the tracker.<br />
-							- Two-Stage: First summarizes changes, then updates the tracker.</small
+							>Select how the tracker agent updates the tracker:<br />
+							- Single-Stage: one request to the tracker agent per update.<br />
+							- Two-Stage: a first request lists what changed in the latest message, a second applies only those changes.</small
 						><br />
 						<select id="tracker_enhanced_generation_mode" class="text_pole">
-							<option value="inline">Inline</option>
 							<option value="single-stage">Single-Stage</option>
 							<option value="two-stage">Two-Stage</option>
 						</select>
@@ -133,15 +131,15 @@
 					<div id="generate_context_section" class="tracker-block m-b-1 m-t-1">
 						<label for="tracker_enhanced_context_prompt">Context Template</label><br />
 						<small
-							>Define the template for generating the tracker. Use macros like:<br />
-							{{trackerSystemPrompt}}, {{characterDescriptions}}, {{trackerExamples}}, {{recentMessages}}, {{currentTracker}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{firstStageMessage}} (Only in two stage mode).</small
+							>The tracker agent receives four chat messages: <b>system</b> = System Prompt below; <b>user</b> = this Context Template (reference material and the recent messages up to the one before the analysed message); <b>assistant</b> = the current tracker, sent automatically as the agent's own previous output; <b>user</b> = Request Prompt below with the analysed message. Macros here:<br />
+							{{characterDescriptions}}, {{worldInfo}}, {{trackerExamples}}, {{recentMessages}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{firstStageMessage}} (two-stage only). {{trackerSystemPrompt}} and {{currentTracker}} are accepted for old templates but render empty, since their content travels in its own message.</small
 						><br />
 						<textarea id="tracker_enhanced_context_prompt" class="text_pole" rows="5"></textarea>
 					</div>
 					<div class="tracker-block m-b-1 m-t-1">
 						<label for="tracker_enhanced_system_prompt">System Prompt</label><br />
 						<small
-							>Define the system-level prompt for tracker generation. Use macros like:<br />
+							>Sent to the tracker agent as the system message: its role, rules and output format. Macros:<br />
 							{{charNames}}, {{defaultTracker}}, {{trackerFormat}}.</small
 						><br />
 						<textarea id="tracker_enhanced_system_prompt" class="text_pole" rows="5"></textarea>
@@ -149,8 +147,8 @@
 					<div class="tracker-block m-b-1 m-t-1">
 						<label for="tracker_enhanced_request_prompt">Request Prompt</label><br />
 						<small
-							>Set the request prompt for generating the tracker. Available macros include:<br />
-							{{trackerFieldPrompt}}, {{trackerFormat}}, {{message}} (last message), {{firstStageMessage}} (Two-Stage mode only).</small
+							>Sent as the final user message, right after the assistant message holding the current tracker. Macros:<br />
+							{{latestMessage}} (speaker and text of the analysed message), {{message}} (its text only), {{trackerFieldPrompt}}, {{trackerFormat}}, {{firstStageMessage}} (two-stage only). If the template has neither message macro, the analysed message is prepended automatically.</small
 						><br />
 						<textarea id="tracker_enhanced_request_prompt" class="text_pole" rows="5"></textarea>
 					</div>
@@ -162,20 +160,12 @@
 						><br />
 						<textarea id="tracker_enhanced_recent_messages" class="text_pole" rows="5"></textarea>
 					</div>
-					<div id="inline_request_section" class="tracker-block m-b-1 m-t-1">
-						<label for="tracker_enhanced_inline_request_prompt">Inline Request Prompt</label><br />
-						<small
-							>Configure the prompt injected at the start of every message in Inline mode. Use macros like:<br />
-							{{trackerFieldPrompt}}, {{trackerFormat}}, {{message}}.</small
-						><br />
-						<textarea id="tracker_enhanced_inline_request_prompt" class="text_pole" rows="5"></textarea>
-					</div>
 					<div id="message_summarization_section">
 						<div class="tracker-block m-b-1 m-t-1">
 							<label for="tracker_enhanced_message_summarization_context_template">Message Summarization Context Template</label><br />
 							<small
-								>Template used for summarizing the last message. Macros available:<br />
-								{{trackerSystemPrompt}}, {{characterDescriptions}}, {{trackerExamples}}, {{recentMessages}}, {{currentTracker}}, {{trackerFormat}}, {{trackerFieldPrompt}}, {{messageSummarizationSystemPrompt}}.</small
+								>Stage one's context, sent as the first user message (same four-message layout as the tracker request: the Summarization System Prompt is the system message, the current tracker is the assistant message, the Summarization Request Prompt with the analysed message closes). Macros:<br />
+								{{characterDescriptions}}, {{worldInfo}}, {{trackerExamples}}, {{recentMessages}}, {{trackerFormat}}, {{trackerFieldPrompt}}. {{messageSummarizationSystemPrompt}} and {{currentTracker}} render empty here.</small
 							><br />
 							<textarea id="tracker_enhanced_message_summarization_context_template" class="text_pole" rows="5"></textarea>
 						</div>
@@ -244,7 +234,7 @@
 			<!-- Other Settings -->
 			<div class="tracker-block m-b-1 m-t-1">
 				<label for="tracker_enhanced_number_of_messages">Number of Recent Messages to Include</label><br />
-				<small>Set how many recent messages are included in tracker generation prompts. In Inline mode, this defines how many messages have trackers added.</small><br />
+				<small>How many recent messages are included in tracker generation prompts.</small><br />
 				<input max="99" min="1" class="text_pole" id="tracker_enhanced_number_of_messages" type="number" />
 			</div>
 			<div class="tracker-block m-b-1 m-t-1">
