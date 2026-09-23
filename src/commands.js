@@ -1,4 +1,4 @@
-import { debug, getLastNonSystemMessageIndex, getPreviousNonSystemMessageIndex } from "../lib/utils.js";
+import { debug, getLastNonSystemMessageIndex } from "../lib/utils.js";
 import { saveChatConditional, chat, chat_metadata } from "../../../../../script.js";
 import { generateTracker } from "./generation.js";
 import { removeTrackerFromMessage } from "./tracker.js";
@@ -34,18 +34,14 @@ export async function generateTrackerCommand(args, value){
     let include = args?.include ? args.include.toUpperCase() : null;
     if(!include || !Object.keys(FIELD_INCLUDE_OPTIONS).includes(include)) include = 'DYNAMIC';
 
-    const previousMesId = getPreviousNonSystemMessageIndex(mesId);
-    if (previousMesId !== -1) {
-        debug("Generating tracker for message " + mesId + " from command");
-        const tracker = await generateTracker(previousMesId, FIELD_INCLUDE_OPTIONS[include]);
-        
-        if (tracker) {
-            return JSON.stringify(tracker);
-        } else {
-            throw new Error(`Invalid response from tracker generation.`);
-        }
+    // Post-state semantics: the tracker for message N is generated from context up to and including N.
+    debug("Generating tracker for message " + mesId + " from command");
+    const tracker = await generateTracker(mesId, FIELD_INCLUDE_OPTIONS[include]);
+
+    if (tracker) {
+        return JSON.stringify(tracker);
     } else {
-        throw new Error(`No valid message found before message ${mesId} to generate a tracker.`);
+        throw new Error(`Invalid response from tracker generation.`);
     }
 }
 

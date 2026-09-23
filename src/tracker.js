@@ -62,6 +62,19 @@ function serializeTracker(trackerObject) {
 //#region Tracker Functions
 
 /**
+ * Stores a tracker on a message, saves the chat and refreshes that message's preview.
+ * Post-state semantics: the tracker on message N describes the world AFTER message N.
+ * @param {number} mesId - The message index.
+ * @param {object} tracker - The tracker object.
+ */
+async function saveTrackerOnMessage(mesId, tracker) {
+	debug("Saving tracker on message:", { mesId, tracker });
+	chat[mesId].tracker = tracker;
+	await saveChatConditional();
+	TrackerPreviewManager.updatePreview(mesId);
+}
+
+/**
  * Injects the inline prompt into the extension prompt system.
  * @param {boolean} clearTracker - If true, clears the inline prompt.
  */
@@ -315,8 +328,10 @@ async function handleStagedGeneration(type, options, dryRun) {
 
 	await sendUserMessage(type, options, dryRun);
 
-	chat_metadata.tracker.tempTrackerId = null;
-	chat_metadata.tracker.tempTracker = null;
+	// Legacy: older versions stashed a "tracker for the upcoming message" here. Post-state semantics
+	// store explicit trackers directly on a message instead, so just drop any leftovers.
+	delete chat_metadata.tracker.tempTrackerId;
+	delete chat_metadata.tracker.tempTracker;
 
 	const mesId = getLastNonSystemMessageIndex();
 	if (mesId === -1) {
@@ -324,95 +339,49 @@ async function handleStagedGeneration(type, options, dryRun) {
 		return;
 	}
 
-	if (shouldShowPopup(mesId, type)) {
-		const manualTracker = await showManualTrackerPopup(mesId);
-		if (manualTracker) {
-			chat[mesId].tracker = manualTracker;
-			await saveChatConditional();
-			TrackerPreviewManager.updatePreview(mesId);
-		}
-	}
-
 	const lastMes = chat[mesId];
+	const isRedo = [ACTION_TYPES.CONTINUE, ACTION_TYPES.SWIPE, ACTION_TYPES.REGENERATE].includes(type);
+	// The slot that holds "the world as it stands right now": the player's message just sent, or,
+	// when redoing `mesId`, the message before it.
+	const nowSlot = isRedo ? getPreviousNonSystemMessageIndex(mesId) : mesId;
 
-	let tracker;
-	let position;
-
-	if ([ACTION_TYPES.CONTINUE, ACTION_TYPES.SWIPE, ACTION_TYPES.REGENERATE].includes(type)) {
-		const hasTracker = trackerExists(lastMes.tracker, extensionSettings.trackerDef);
-		if (!hasTracker && shouldGenerateTracker(mesId, type)) {
-			const previousMesId = getPreviousNonSystemMessageIndex(mesId);
-			lastMes.tracker = await generateTracker(previousMesId);
-			if (type !== ACTION_TYPES.REGENERATE) {
-				await saveChatConditional();
-				TrackerPreviewManager.updatePreview(mesId);
-			}
-		}
-
-		if (type === ACTION_TYPES.REGENERATE && hasTracker) {
-			chat_metadata.tracker.tempTrackerId = mesId;
-			chat_metadata.tracker.tempTracker = lastMes.tracker;
-			await saveChatConditional();
-			TrackerPreviewManager.updatePreview(mesId);
-		}
-
-		position = 0;
-		tracker = lastMes.tracker;
-		log("Tracker selection", { type, mesId, source: hasTracker ? `message ${mesId} (own tracker)` : "none on target message, falling back" });
-	} else {
-		// Deferred tracker generation for new responses.
-		//
-		// Previously we generated the upcoming message's tracker HERE — up front, blocking the main
-		// response — so clicking "send" produced a tracker first and only then started the reply.
-		// We now skip that auto-generation: the main prompt is injected with the LAST AVAILABLE
-		// tracker (the fallback below), the response generates immediately, and the fresh tracker for
-		// the new message is generated AFTER it is rendered, in addTrackerToMessage() (its `else`
-		// branch fires because no tempTracker is stashed here).
-		//
-		// Explicit, user-initiated trackers still apply up front: a command override
-		// (`/tracker-enhanced-override`) and the manual tracker popup are deliberate "before the
-		// response" inputs, so they are kept.
-		if(chat_metadata.tracker.cmdTrackerOverride) {
-			tracker = { ...chat_metadata.tracker.cmdTrackerOverride };
-			chat_metadata.tracker.cmdTrackerOverride = null;
-		} else if (shouldShowPopup(mesId + 1, type)) {
-			const manualTracker = await showManualTrackerPopup(mesId + 1);
-			if (manualTracker) tracker = manualTracker;
-		}
-
-		if (tracker) {
-			chat_metadata.tracker.tempTrackerId = mesId + 1;
-			chat_metadata.tracker.tempTracker = tracker;
-			await saveChatConditional();
-
-			position = 0;
-		}
+	if (isRedo && lastMes.tracker !== undefined) {
+		// The target's own tracker describes the text about to be replaced or extended. Drop it so
+		// addTrackerToMessage() regenerates it for the new text once it renders, and so it can never
+		// be mistaken for the state to inject (a truthy-but-empty leftover used to skip the fallback).
+		delete lastMes.tracker;
+		await saveChatConditional();
+		TrackerPreviewManager.updatePreview(mesId);
 	}
 
-	if (!tracker) {
-		// Deferred generation: never generate a tracker before the response. Reuse the most recent
-		// message that already has a tracker so the model still sees current state; the fresh tracker
-		// for this turn is generated afterwards in addTrackerToMessage() (post-response), which saves
-		// it to the message so the next turn has something to reuse here.
-		//
-		// The only gap is the very first message of a brand-new, tracker-less chat: there is nothing
-		// to reuse yet, so nothing is injected for that one turn. It self-heals from the next turn on,
-		// once the first post-response tracker has been saved.
-		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesId);
-		log("Tracker selection (fallback)", { type: type ?? "normal", mesId, source: lastMesWithTrackerIndex !== null ? `message ${lastMesWithTrackerIndex}` : "NONE: no message up to mesId has a tracker" });
-
-		if (lastMesWithTrackerIndex !== null) {
-			const lastMesWithTracker = chat[lastMesWithTrackerIndex];
-
-			tracker = getCleanTracker(lastMesWithTracker.tracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON);
-			position = 0;
-		} else {
-			tracker = "";
-			position = 0;
-		}
+	// Explicit, user-initiated trackers apply up front and are stored on `nowSlot` so the selection
+	// below picks them up. (A command override may already have been applied to the player's message
+	// when it rendered; see addTrackerToMessage.)
+	if (chat_metadata.tracker.cmdTrackerOverride) {
+		if (nowSlot !== -1) await saveTrackerOnMessage(nowSlot, { ...chat_metadata.tracker.cmdTrackerOverride });
+		chat_metadata.tracker.cmdTrackerOverride = null;
+		await saveChatConditional();
+	} else if (shouldShowPopup(mesId, type)) {
+		const manualTracker = await showManualTrackerPopup(mesId);
+		if (manualTracker && nowSlot !== -1) await saveTrackerOnMessage(nowSlot, manualTracker);
+	} else if (!isRedo && shouldShowPopup(mesId + 1, type)) {
+		// "Popup for the upcoming character message": the state the reply starts from, i.e. the
+		// state after the player's message.
+		const manualTracker = await showManualTrackerPopup(mesId + 1);
+		if (manualTracker) await saveTrackerOnMessage(mesId, manualTracker);
 	}
 
-	await injectTracker(tracker, position);
+	// Selection. The model must see the last tracker on or before `nowSlot`. For a fresh reply with
+	// generation target User/Both that is the player's message itself (generated when it rendered);
+	// with target Character it is the previous reply, so only the player's own text is not folded in.
+	const sourceIndex = nowSlot === -1 ? null : getLastMessageWithTracker(nowSlot);
+	log("Tracker selection", { type: type ?? "normal", mesId, nowSlot, source: sourceIndex !== null ? `message ${sourceIndex}` : "NONE: no tracker on or before nowSlot" });
+
+	const tracker = sourceIndex !== null
+		? getCleanTracker(chat[sourceIndex].tracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON)
+		: "";
+
+	await injectTracker(tracker, 0);
 
 	if (manageStopButton) restoreSendButtons();
 }
@@ -469,23 +438,6 @@ export async function addTrackerToMessage(mesId) {
 	const manageStopButton = $("#mes_stop").css("display") === "none";
 	if (manageStopButton) deactivateSendButtons();
 	try {
-		/**
-		 * Saves the tracker to the message and updates the chat metadata.
-		 * @param {number} mesId - The message ID.
-		 * @param {object} tracker - The tracker object.
-		 */
-		const saveTrackerToMessage = async (mesId, tracker) => {
-			debug("Adding tracker to message:", { mesId, mes: chat[mesId], tracker });
-			chat[mesId].tracker = tracker;
-			if(typeof chat_metadata.tracker !== "undefined"){
-				chat_metadata.tracker.tempTrackerId = null;
-				chat_metadata.tracker.tempTracker = null;
-				chat_metadata.tracker.cmdTrackerOverride = null;
-			}
-			await saveChatConditional();
-			TrackerPreviewManager.updatePreview(mesId);
-		};
-
 		if (extensionSettings.generationMode === generationModes.INLINE) {
 			const tempId = chat_metadata?.tracker?.inlineTrackerId ?? null;
 			// tempId null means no inline session is pending; without the guard, null arithmetic in
@@ -501,28 +453,22 @@ export async function addTrackerToMessage(mesId) {
 
 		if(isSystemMessage(mesId)) return;
 
-		const tempId = chat_metadata?.tracker?.tempTrackerId ?? null;
-		if(chat_metadata?.tracker?.cmdTrackerOverride) {
-			await saveTrackerToMessage(mesId, chat_metadata.tracker.cmdTrackerOverride);
-		} else if (tempId != null) {
-			debug("Checking for temp tracker match", { mesId, tempId });
-			const trackerMesId = isSystemMessage(tempId) ? getNextNonSystemMessageIndex(tempId) : tempId;
-			const tracker = chat_metadata.tracker.tempTracker;
-			if (trackerMesId === mesId) {
-				await saveTrackerToMessage(mesId, tracker);
-			} else {
-				// A stale tempTrackerId (e.g. from an aborted regenerate) lands here and used to skip
-				// generation for this message without a trace. Surface it; the selection review will
-				// decide whether to clear it and fall through to normal generation.
-				warn("Skipping tracker generation: stale tempTrackerId does not match rendered message", { mesId, tempTrackerId: tempId, trackerMesId });
-			}
-		} else {
-			const previousMesId = getPreviousNonSystemMessageIndex(mesId);
-			if (previousMesId !== -1 && shouldGenerateTracker(mesId, undefined)) {
-				debug("Generating for message with missing tracker:", mesId);
-				const tracker = await generateTracker(previousMesId);
-				await saveTrackerToMessage(mesId, tracker);
-			}
+		if (chat_metadata?.tracker?.cmdTrackerOverride) {
+			// A pending /tracker-enhanced-override is "the state after this message": apply it instead
+			// of generating, whatever the generation target.
+			await saveTrackerOnMessage(mesId, { ...chat_metadata.tracker.cmdTrackerOverride });
+			chat_metadata.tracker.cmdTrackerOverride = null;
+			await saveChatConditional();
+			return;
+		}
+
+		if (shouldGenerateTracker(mesId, undefined)) {
+			// Post-state semantics: the tracker for message N is generated from the context up to and
+			// including N, so it describes the world after N (see AGENTS.md, "Tracker semantics").
+			log("Generating post-state tracker for rendered message", { mesId });
+			const tracker = await generateTracker(mesId);
+			if (tracker) await saveTrackerOnMessage(mesId, tracker);
+			else warn("Tracker generation returned nothing; message left without a tracker", { mesId });
 		}
 	} catch (e) {
 		error("Failed to add tracker to message:", { mesId, e });

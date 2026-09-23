@@ -232,8 +232,11 @@ export async function generateTracker(mesNum, includedFields = FIELD_INCLUDE_OPT
 
 		if (!tracker) return null;
 
-		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesNum);
-		const lastMesWithTracker = chat[lastMesWithTrackerIndex];
+		// Post-state semantics: the tracker being produced describes the world after `mesNum`, so its
+		// base is the last tracker strictly before it. `mesNum`'s own tracker (if any) belongs to text
+		// that may just have been replaced by a swipe and must not leak into the new one.
+		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesNum - 1);
+		const lastMesWithTracker = lastMesWithTrackerIndex !== null ? chat[lastMesWithTrackerIndex] : null;
 		let lastTracker = lastMesWithTracker ? lastMesWithTracker.tracker : getDefaultTracker(extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, OUTPUT_FORMATS.JSON);
 		// 4th param is includeUnmatchedFields (boolean) — this used to pass FIELD_INCLUDE_OPTIONS.ALL,
 		// which only worked because the string "all" is truthy.
@@ -597,17 +600,13 @@ function getRecentMessages(template, mesNum, includedFields) {
  */
 function getCurrentTracker(mesNum, includedFields) {
 	debug("Getting current tracker for message:", { mesNum });
-	const message = chat[mesNum];
-	const tracker = message.tracker;
+	// "Current" tracker for the agent = the state before `mesNum` (post-state of the previous message).
+	// The message's own tracker is deliberately ignored: it is what we are about to replace.
 	let returnTracker;
-	if (tracker && Object.keys(tracker).length !== 0) {
-		returnTracker = getTracker(tracker, extensionSettings.trackerDef, includedFields, false, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
-	} else {
-		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesNum);
-		const lastMesWithTracker = chat[lastMesWithTrackerIndex];
-		if (lastMesWithTracker) returnTracker = getTracker(lastMesWithTracker.tracker, extensionSettings.trackerDef, includedFields, false, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
-		else returnTracker = getDefaultTracker(extensionSettings.trackerDef, includedFields, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
-	}
+	const lastMesWithTrackerIndex = getLastMessageWithTracker(mesNum - 1);
+	const lastMesWithTracker = lastMesWithTrackerIndex !== null ? chat[lastMesWithTrackerIndex] : null;
+	if (lastMesWithTracker) returnTracker = getTracker(lastMesWithTracker.tracker, extensionSettings.trackerDef, includedFields, false, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
+	else returnTracker = getDefaultTracker(extensionSettings.trackerDef, includedFields, OUTPUT_FORMATS[extensionSettings.trackerFormat]);
 
 	if (extensionSettings.trackerFormat == trackerFormat.JSON) {
 		returnTracker = JSON.stringify(returnTracker, null, 2);

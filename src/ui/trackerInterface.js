@@ -258,16 +258,9 @@ export class TrackerInterface {
             return;
         }
 
-        const previousMesId = getPreviousNonSystemMessageIndex(targetMesId);
-        if (previousMesId === -1) {
-            toastr.info('Need at least one prior non-system message before the tracker can be regenerated.');
-            this.refreshContent(this.mode);
-            this.disableControls(false);
-            return;
-        }
-
         try {
-            const newTracker = await generateTracker(previousMesId, fieldIncludeOption);
+            // Post-state semantics: regenerate from context up to and including the target message.
+            const newTracker = await generateTracker(targetMesId, fieldIncludeOption);
             if (!newTracker) {
                 toastr.warning('Tracker generation returned no data. Try again after additional chat context.');
                 this.refreshContent(this.mode);
