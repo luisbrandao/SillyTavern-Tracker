@@ -4,6 +4,9 @@ A tracker extension for SillyTavern that monitors character and scene state acro
 
 ## Changelog
 
+### 23-09-2026
+- Experimental **Inject tracker as a tool-call result** toggle (settings, below Injection Role). On chat completion APIs the tracker is appended after your turn as a completed `get_scene_state` call and its result instead of a text block, so the model reads it as external data. Needs SillyTavern's *Enable function calling* on and prompt post-processing set to *None* or a *with tools* variant.
+
 ### 13-06-2026
 - Added a global **enable/disable toggle** directly in the Tracker Interface window header, so you can turn the extension on/off without opening the settings panel (mirrors the settings checkbox).
 - Maintenance under new ownership (see Credits): replaced the hand‑rolled YAML parser with SillyTavern's bundled library, fixed generation mutex leaks, hardened tracker templates against XSS, corrected settings migration, and removed deprecated event handlers and the old object‑editor UI.

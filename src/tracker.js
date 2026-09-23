@@ -10,6 +10,7 @@ import { jsonToYAML } from "../lib/ymlParser.js";
 import { FIELD_INCLUDE_OPTIONS, getDefaultTracker, OUTPUT_FORMATS, getTracker as getCleanTracker, trackerExists, cleanTracker } from "./trackerDataHandler.js";
 import { TrackerEditorModal } from "./ui/trackerEditorModal.js";
 import { TrackerPreviewManager } from "./ui/trackerPreviewManager.js";
+import { isToolInjectionActive, setToolInjectionPayload } from "./toolInjection.js";
 
 // Constants
 const ACTION_TYPES = {
@@ -96,16 +97,26 @@ function getTrackerInjectionRole() {
  */
 async function injectTracker(tracker = "", position = 0) {
 	let trackerBlock = "";
+	let trackerText = "";
 	const role = getTrackerInjectionRole();
 	if(trackerExists(tracker, extensionSettings.trackerDef) && tracker != "") {
 		// Clean to a JSON object (strips defaults), then serialize in the user's configured format.
 		const cleaned = cleanTracker(tracker, extensionSettings.trackerDef, OUTPUT_FORMATS.JSON);
 		if(cleaned && Object.keys(cleaned).length) {
-			const trackerText = serializeTracker(cleaned);
-			debug("Injecting tracker:", { tracker: trackerText, position, format: extensionSettings.trackerFormat, role: extensionSettings.trackerInjectionRole });
+			trackerText = serializeTracker(cleaned);
+			debug("Injecting tracker:", { tracker: trackerText, position, format: extensionSettings.trackerFormat, role: extensionSettings.trackerInjectionRole, toolMode: isToolInjectionActive() });
 			trackerBlock = `<tracker>\n${trackerText}\n</tracker>`;
 		}
 	}
+	// Experimental tool mode (chat completion only): the tracker travels as a tool-call result appended
+	// in onChatCompletionPromptReady() (src/toolInjection.js). Keep the text injection empty so it
+	// doesn't double up, and so a stale text block is cleared when the mode is switched mid-session.
+	if (isToolInjectionActive()) {
+		setToolInjectionPayload(trackerText);
+		await setExtensionPrompt("trackerEnhanced", "", 1, position, true, role);
+		return;
+	}
+	setToolInjectionPayload(null);
 	position = Math.max(extensionSettings.minimumDepth, position);
 	// An assistant-role injection at depth 0 would be the final message in the prompt: Claude-style
 	// backends treat a trailing assistant message as a prefill and continue writing from the tracker

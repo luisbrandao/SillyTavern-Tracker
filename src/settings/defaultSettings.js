@@ -944,6 +944,7 @@ export const defaultSettings = {
 	showPopupFor: generationTargets.NONE,
 	trackerFormat: trackerFormat.YAML,
 	trackerInjectionRole: trackerInjectionRoles.USER,
+	trackerToolInjection: false,
 
 	generationMode: generationModes.SINGLE_STAGE,
 

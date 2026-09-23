@@ -14,6 +14,7 @@ import { TrackerInterface } from "./src/ui/trackerInterface.js";
 import { TrackerPreviewManager } from "./src/ui/trackerPreviewManager.js";
 import { generateTrackerCommand, getTrackerCommand, removeTrackerFromMessageCommand, saveTrackerToMessageCommand, stateTrackerCommand, trackerOverrideCommand } from "./src/commands.js";
 import { FIELD_INCLUDE_OPTIONS } from "./src/trackerDataHandler.js";
+import { onChatCompletionPromptReady, registerTrackerTool } from "./src/toolInjection.js";
 
 export const extensionName = "tracker-enhanced";
 // Derive the folder path from this module's own location so the extension works no matter what
@@ -36,6 +37,10 @@ eventSource.on(event_types.CHAT_CHANGED, eventHandlers.onChatChanged);
 eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, eventHandlers.onCharacterMessageRendered);
 eventSource.on(event_types.USER_MESSAGE_RENDERED, eventHandlers.onUserMessageRendered);
 eventSource.on(event_types.GENERATION_AFTER_COMMANDS, eventHandlers.onGenerateAfterCommands);
+// Experimental tool-call injection: appends the tracker as a get_scene_state round trip once the chat
+// completion prompt is fully built (see src/toolInjection.js). No-op unless the setting is on.
+eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, onChatCompletionPromptReady);
+registerTrackerTool();
 
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({

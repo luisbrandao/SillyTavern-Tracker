@@ -79,6 +79,14 @@
 					<option value="assistant">Assistant</option>
 				</select>
 			</div>
+			<!-- Tracker Tool Injection (experimental) -->
+			<div class="tracker-block m-b-1 m-t-1">
+				<div class="flex-container">
+					<input id="tracker_enhanced_tool_injection" type="checkbox" />
+					<label for="tracker_enhanced_tool_injection">Inject tracker as a tool-call result (experimental)</label>
+				</div>
+				<small>Chat completion only. Instead of a text block, the tracker is appended after the player's turn as a completed <code>get_scene_state</code> call plus its result, so the model reads it as external data rather than as part of anyone's message. Requires SillyTavern's "Enable function calling" to send the tool definition, and prompt post-processing set to None or a "with tools" variant (the plain variants strip tool messages). Falls back to the text block on text completion APIs. The Injection Role above is ignored while this is on.</small>
+			</div>
 			<hr class="sysHR" />
 
 			<!-- Preset Management -->

@@ -138,6 +138,7 @@ function setSettingsInitialValues() {
 	$("#tracker_enhanced_show_popup_for").val(extensionSettings.showPopupFor);
 	$("#tracker_enhanced_format").val(extensionSettings.trackerFormat);
 	$("#tracker_enhanced_injection_role").val(extensionSettings.trackerInjectionRole);
+	$("#tracker_enhanced_tool_injection").prop("checked", Boolean(extensionSettings.trackerToolInjection));
 	$("#tracker_enhanced_debug").prop("checked", extensionSettings.debugMode);
 
 	// Set other settings fields
@@ -190,6 +191,7 @@ function registerSettingsListeners() {
 	$("#tracker_enhanced_show_popup_for").on("change", onSettingSelectChange("showPopupFor"));
 	$("#tracker_enhanced_format").on("change", onSettingSelectChange("trackerFormat"));
 	$("#tracker_enhanced_injection_role").on("change", onSettingSelectChange("trackerInjectionRole"));
+	$("#tracker_enhanced_tool_injection").on("input", onSettingCheckboxInput("trackerToolInjection"));
 	$("#tracker_enhanced_debug").on("input", onSettingCheckboxInput("debugMode"));
 
 	$("#tracker_enhanced_context_prompt").on("input", onSettingInputareaInput("generateContextTemplate"));
