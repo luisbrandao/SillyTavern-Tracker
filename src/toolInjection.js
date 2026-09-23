@@ -1,7 +1,8 @@
 import { main_api } from "../../../../../script.js";
 import { ToolManager } from "../../../../tool-calling.js";
+import { oai_settings, custom_prompt_post_processing_types } from "../../../../openai.js";
 import { extensionSettings } from "../index.js";
-import { debug } from "../lib/utils.js";
+import { debug, warn } from "../lib/utils.js";
 
 /** Name of the function the tracker is presented as the result of. */
 export const TRACKER_TOOL_NAME = "get_scene_state";
@@ -12,6 +13,21 @@ export const TRACKER_TOOL_NAME = "get_scene_state";
  * @type {string|null}
  */
 let currentPayload = null;
+
+/** Whether the post-processing misconfiguration toast was already shown this session. */
+let warnedPostProcessing = false;
+
+/**
+ * Core's mergeMessages() (src/prompt-converters.js) turns `tool` messages into `user` and deletes
+ * `tool_calls` unless Prompt Post-Processing is None or a "(with tools)" variant. Under any other
+ * value the pair would arrive at the backend as an empty assistant message followed by the tracker
+ * glued into a user message, which is worse than the plain text block.
+ * @returns {boolean}
+ */
+function postProcessingKeepsTools() {
+	const { NONE, MERGE_TOOLS, SEMI_TOOLS, STRICT_TOOLS } = custom_prompt_post_processing_types;
+	return [NONE, MERGE_TOOLS, SEMI_TOOLS, STRICT_TOOLS].includes(oai_settings.custom_prompt_post_processing);
+}
 
 /**
  * Whether the user turned the experimental tool-call injection on.
@@ -84,6 +100,21 @@ export function onChatCompletionPromptReady(eventData) {
 	if (!currentPayload) return;
 	const chat = eventData?.chat;
 	if (!Array.isArray(chat)) return;
+
+	if (!postProcessingKeepsTools()) {
+		// Fall back to the classic text block (as a user message, so the merge behaves like the text
+		// injection did) instead of sending a pair that core is about to mangle.
+		chat.push({ role: "user", content: `<tracker>\n${currentPayload}\n</tracker>` });
+		warn("Tool injection: Prompt Post-Processing is set to a \"(no tools)\" variant, which strips tool messages. Fell back to the text block.", { postProcessing: oai_settings.custom_prompt_post_processing });
+		if (!eventData.dryRun && !warnedPostProcessing) {
+			warnedPostProcessing = true;
+			toastr.warning('Set Prompt Post-Processing to "None" or a "(with tools)" variant in the connection panel. The current "(no tools)" setting strips tool messages, so the tracker was sent as a text block instead. That same setting is why SillyTavern marks function calling as unsupported.', "Tracker Enhanced: tool injection", { timeOut: 15000 });
+		}
+		return;
+	}
+	if (!oai_settings.function_calling && !eventData.dryRun) {
+		debug("Tool injection: ST function calling is off, so the tools definition is not sent. Enable it if the backend rejects tool history without one.");
+	}
 
 	const id = makeToolCallId();
 	const pair = [
