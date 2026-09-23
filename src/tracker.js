@@ -2,7 +2,7 @@ import { saveChatConditional, chat, chat_metadata, setExtensionPrompt, extension
 
 import { hasPendingFileAttachment } from "../../../../../scripts/chats.js";
 import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js";
-import { debug, error, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
+import { debug, error, log, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
 import { generateTracker, getRequestPrompt } from "./generation.js";
 import { generationModes, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
@@ -111,6 +111,7 @@ async function injectTracker(tracker = "", position = 0) {
 	// Experimental tool mode (chat completion only): the tracker travels as a tool-call result appended
 	// in onChatCompletionPromptReady() (src/toolInjection.js). Keep the text injection empty so it
 	// doesn't double up, and so a stale text block is cleared when the mode is switched mid-session.
+	log("Injecting tracker", { mode: isToolInjectionActive() ? "tool" : "text", role: extensionSettings.trackerInjectionRole, position, empty: trackerText === "" });
 	if (isToolInjectionActive()) {
 		setToolInjectionPayload(trackerText);
 		await setExtensionPrompt("trackerEnhanced", "", 1, position, true, role);
@@ -357,6 +358,7 @@ async function handleStagedGeneration(type, options, dryRun) {
 
 		position = 0;
 		tracker = lastMes.tracker;
+		log("Tracker selection", { type, mesId, source: hasTracker ? `message ${mesId} (own tracker)` : "none on target message, falling back" });
 	} else {
 		// Deferred tracker generation for new responses.
 		//
@@ -397,6 +399,7 @@ async function handleStagedGeneration(type, options, dryRun) {
 		// to reuse yet, so nothing is injected for that one turn. It self-heals from the next turn on,
 		// once the first post-response tracker has been saved.
 		const lastMesWithTrackerIndex = getLastMessageWithTracker(mesId);
+		log("Tracker selection (fallback)", { type: type ?? "normal", mesId, source: lastMesWithTrackerIndex !== null ? `message ${lastMesWithTrackerIndex}` : "NONE: no message up to mesId has a tracker" });
 
 		if (lastMesWithTrackerIndex !== null) {
 			const lastMesWithTracker = chat[lastMesWithTrackerIndex];
@@ -507,6 +510,11 @@ export async function addTrackerToMessage(mesId) {
 			const tracker = chat_metadata.tracker.tempTracker;
 			if (trackerMesId === mesId) {
 				await saveTrackerToMessage(mesId, tracker);
+			} else {
+				// A stale tempTrackerId (e.g. from an aborted regenerate) lands here and used to skip
+				// generation for this message without a trace. Surface it; the selection review will
+				// decide whether to clear it and fall through to normal generation.
+				warn("Skipping tracker generation: stale tempTrackerId does not match rendered message", { mesId, tempTrackerId: tempId, trackerMesId });
 			}
 		} else {
 			const previousMesId = getPreviousNonSystemMessageIndex(mesId);

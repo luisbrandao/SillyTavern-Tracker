@@ -2,7 +2,7 @@ import { main_api } from "../../../../../script.js";
 import { ToolManager } from "../../../../tool-calling.js";
 import { oai_settings, custom_prompt_post_processing_types } from "../../../../openai.js";
 import { extensionSettings } from "../index.js";
-import { debug, warn } from "../lib/utils.js";
+import { debug, log, warn } from "../lib/utils.js";
 
 /** Name of the function the tracker is presented as the result of. */
 export const TRACKER_TOOL_NAME = "get_scene_state";
@@ -127,5 +127,5 @@ export function onChatCompletionPromptReady(eventData) {
 	const insertAt = last?.role === "assistant" && !last.tool_calls ? chat.length - 1 : chat.length;
 	chat.splice(insertAt, 0, ...pair);
 
-	if (!eventData.dryRun) debug("Tool injection: appended tracker tool call", { id, insertAt, payloadLength: currentPayload.length });
+	if (!eventData.dryRun) log("Tool injection: appended tracker tool call", { id, insertAt, payloadLength: currentPayload.length });
 }
