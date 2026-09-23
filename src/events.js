@@ -2,7 +2,7 @@ import { chat } from "../../../../../script.js";
 import { selected_group, is_group_generating } from "../../../../../scripts/group-chats.js";
 import { debug, getLastMessageWithTracker, log } from "../lib/utils.js";
 import { isEnabled } from "./settings/settings.js";
-import { prepareMessageGeneration, addTrackerToMessage, clearInjects } from "./tracker.js";
+import { prepareMessageGeneration, addTrackerToMessage, clearInjects, markTrackerDirty } from "./tracker.js";
 import { releaseGeneration } from "../lib/interconnection.js";
 import { FIELD_INCLUDE_OPTIONS, getTracker, OUTPUT_FORMATS, saveTracker } from "./trackerDataHandler.js";
 import { TrackerInterface } from "./ui/trackerInterface.js";
@@ -90,11 +90,20 @@ async function onUserMessageRendered(mesId) {
 	await onMessageRendered("USER_MESSAGE_RENDERED", mesId);
 }
 
+/**
+ * Event handler for when a message's text was edited: its tracker (if any) no longer matches the
+ * text, so flag it; it is regenerated lazily the next time it is needed (see ensureFreshTracker).
+ */
+async function onMessageEdited(mesId) {
+	await markTrackerDirty(mesId);
+}
+
 export const eventHandlers = {
 	onChatChanged,
 	onGenerateAfterCommands,
 	onCharacterMessageRendered,
 	onUserMessageRendered,
+	onMessageEdited,
 };
 
 function updateTrackerInterface() {

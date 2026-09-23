@@ -5,7 +5,7 @@ import { getMessageTimeStamp } from "../../../../../scripts/RossAscends-mods.js"
 import { debug, error, log, getLastMessageWithTracker, getLastNonSystemMessageIndex, getNextNonSystemMessageIndex, getPreviousNonSystemMessageIndex, isSystemMessage, shouldGenerateTracker, shouldShowPopup, warn } from "../lib/utils.js";
 import { extensionSettings } from "../index.js";
 import { generateTracker, getRequestPrompt } from "./generation.js";
-import { generationModes, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
+import { generationModes, generationTargets, trackerFormat, trackerInjectionRoles } from "./settings/settings.js";
 import { jsonToYAML } from "../lib/ymlParser.js";
 import { FIELD_INCLUDE_OPTIONS, getDefaultTracker, OUTPUT_FORMATS, getTracker as getCleanTracker, trackerExists, cleanTracker } from "./trackerDataHandler.js";
 import { TrackerEditorModal } from "./ui/trackerEditorModal.js";
@@ -70,8 +70,56 @@ function serializeTracker(trackerObject) {
 async function saveTrackerOnMessage(mesId, tracker) {
 	debug("Saving tracker on message:", { mesId, tracker });
 	chat[mesId].tracker = tracker;
+	// Remember which swipe this tracker describes; isTrackerStale() compares it with the swipe shown.
+	chat[mesId].trackerSwipeId = chat[mesId].swipe_id ?? 0;
+	delete chat[mesId].trackerDirty;
 	await saveChatConditional();
 	TrackerPreviewManager.updatePreview(mesId);
+}
+
+/**
+ * Whether the tracker on a message no longer matches its text: the user navigated to a different
+ * swipe than the one it was generated for, or edited the message since. Trackers saved before the
+ * swipe marker existed count as clean.
+ * @param {number} mesId - The message index.
+ * @returns {boolean}
+ */
+function isTrackerStale(mesId) {
+	const mes = chat[mesId];
+	if (!mes || !trackerExists(mes.tracker, extensionSettings.trackerDef)) return false;
+	if (mes.trackerDirty) return true;
+	if (mes.trackerSwipeId === undefined) return false;
+	return (mes.swipe_id ?? 0) !== mes.trackerSwipeId;
+}
+
+/**
+ * Flags a message's tracker as stale (called on MESSAGE_EDITED). Lazy: nothing is regenerated until
+ * the tracker is actually needed, in ensureFreshTracker().
+ * @param {number} mesId - The message index.
+ */
+export async function markTrackerDirty(mesId) {
+	const mes = chat[mesId];
+	if (!mes || !trackerExists(mes.tracker, extensionSettings.trackerDef) || mes.trackerDirty) return;
+	mes.trackerDirty = true;
+	log("Tracker marked stale after message edit", { mesId });
+	await saveChatConditional();
+}
+
+/**
+ * Regenerates the tracker on `mesId` if it is stale, right before it is used as the injected state or
+ * as the base for the next tracker. Swipe navigation and edits therefore cost nothing by themselves;
+ * one regeneration happens on the next send that depends on that message, for the swipe then shown.
+ * @param {number|null} mesId - The message index, or null/-1 for "nothing to check".
+ */
+async function ensureFreshTracker(mesId) {
+	if (mesId === null || mesId === undefined || mesId === -1) return;
+	if (extensionSettings.generationTarget === generationTargets.NONE) return;
+	if (!isTrackerStale(mesId)) return;
+	const mes = chat[mesId];
+	log("Tracker is stale for the displayed swipe or edited text; regenerating before use", { mesId, swipeId: mes.swipe_id ?? 0, trackerSwipeId: mes.trackerSwipeId, edited: !!mes.trackerDirty });
+	const tracker = await generateTracker(mesId);
+	if (tracker) await saveTrackerOnMessage(mesId, tracker);
+	else warn("Stale tracker regeneration returned nothing; keeping the old one", { mesId });
 }
 
 /**
@@ -350,6 +398,8 @@ async function handleStagedGeneration(type, options, dryRun) {
 		// addTrackerToMessage() regenerates it for the new text once it renders, and so it can never
 		// be mistaken for the state to inject (a truthy-but-empty leftover used to skip the fallback).
 		delete lastMes.tracker;
+		delete lastMes.trackerSwipeId;
+		delete lastMes.trackerDirty;
 		await saveChatConditional();
 		TrackerPreviewManager.updatePreview(mesId);
 	}
@@ -376,6 +426,9 @@ async function handleStagedGeneration(type, options, dryRun) {
 	// with target Character it is the previous reply, so only the player's own text is not folded in.
 	const sourceIndex = nowSlot === -1 ? null : getLastMessageWithTracker(nowSlot);
 	log("Tracker selection", { type: type ?? "normal", mesId, nowSlot, source: sourceIndex !== null ? `message ${sourceIndex}` : "NONE: no tracker on or before nowSlot" });
+	// Lazy per-swipe correctness: if the source was generated for another swipe (or edited since),
+	// regenerate it now for the text actually shown, then inject.
+	await ensureFreshTracker(sourceIndex);
 
 	const tracker = sourceIndex !== null
 		? getCleanTracker(chat[sourceIndex].tracker, extensionSettings.trackerDef, FIELD_INCLUDE_OPTIONS.ALL, true, OUTPUT_FORMATS.JSON)
@@ -465,6 +518,8 @@ export async function addTrackerToMessage(mesId) {
 		if (shouldGenerateTracker(mesId, undefined)) {
 			// Post-state semantics: the tracker for message N is generated from the context up to and
 			// including N, so it describes the world after N (see AGENTS.md, "Tracker semantics").
+			// The base for this tracker is the last one before it; refresh it first if it is stale.
+			await ensureFreshTracker(getLastMessageWithTracker(mesId - 1));
 			log("Generating post-state tracker for rendered message", { mesId });
 			const tracker = await generateTracker(mesId);
 			if (tracker) await saveTrackerOnMessage(mesId, tracker);
